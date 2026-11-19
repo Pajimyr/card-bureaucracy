@@ -36,10 +36,9 @@ Obtížnost zatím mění jen ceny. Navrhuju, aby měnila i sílu úředníka. C
 
 Úředník má ve všech stupních 20 HP a balíček 9 karet. Současný stav (balíček 10, tempo 3) je těžší než nejtěžší navržený stupeň "Pátek 14:55" (tempo 2), a proto je hra téměř nevyhratelná.
 
-Konkrétní změny v kódu, až to schválíš:
-- `PLAYER_DECK_SIZE` nahradit hodnotou z `GameState.DIFFICULTIES` (nové pole `deck_size`).
-- `ENEMY_CARDS_PER_TURN` nahradit hodnotou z `GameState.DIFFICULTIES` (nové pole `enemy_per_turn`).
-- Ceny zůstávají, jen se přepočítají po změně.
+**Stav: schváleno a zapracováno 2026-11-19.** Změny v kódu:
+- `GameState.DIFFICULTIES` má nová pole `deck_size` a `enemy_per_turn`, `main.gd` je čte místo pevných konstant.
+- Ceny zůstaly beze změny.
 
 ## Další možnosti (nepovinné)
 
@@ -49,6 +48,6 @@ Konkrétní změny v kódu, až to schválíš:
 
 ## Tutorial
 
-První případ je tutorial (`GameState.tutorial_done`). Má 8 karet hráče, 3 karty úředníka, úředník nasazuje 1 kartu za tah a tři blokující dialogy: úvod, první útok a overflow/postup zadní řady. Simulace na těchto číslech vyhrává v 88 % (heuristika), takže tutorial je spíš prostor k učení než zkouška.
+První případ je tutorial (`GameState.tutorial_done`). Má 8 karet hráče, 3 karty úředníka, úředník nasazuje 1 kartu za tah a tři blokující dialogy: úvod, první útok a overflow/postup zadní řady. **Tutorial nejde prohrát:** padlé karty hráče se vracejí do balíčku s plným HP a HP hráče neklesne pod 1. Úředník má jen 3 karty a nic neléčí, takže každá položená karta ho postupně dorazí. Simulace nejhoršího hráče (1 nejslabší karta za tah, náhodný slot) vyhrála všech 3000 partií, nejdéle za 13 kol.
 
 Tutorial má vlastní konstanty `TUT_PLAYER_CARDS`, `TUT_ENEMY_CARDS` a `TUT_ENEMY_CARDS_PER_TURN` v `scripts/main.gd`.

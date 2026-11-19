@@ -8,21 +8,25 @@ const WIN_REWARD := 20
 const BASE_CARDS_PER_TURN := 3
 const HAND_SIDES := ["left", "right"]
 
-# Obtížnost mění cenu dalšího kola a ceny v baru.
+# Obtížnost mění velikost hráčova balíčku, tempo úředníka (karty za tah), cenu dalšího
+# kola a ceny v baru. Čísla vychází ze simulace, viz docs/balance.md.
 const DIFFICULTIES := [
 	{
 		"name": "Úřední hodiny",
 		"desc": "Úředníci mají dobrou náladu. Skoro.",
+		"deck_size": 12, "enemy_per_turn": 2,
 		"round_cost": 8, "hand_price": 25, "prosthesis_price": 30,
 	},
 	{
 		"name": "Pondělí ráno",
 		"desc": "Běžný provoz. Fronta až na chodbu.",
+		"deck_size": 11, "enemy_per_turn": 2,
 		"round_cost": 10, "hand_price": 20, "prosthesis_price": 40,
 	},
 	{
 		"name": "Pátek 14:55",
 		"desc": "Za pět minut zavírají. Všechno je dražší.",
+		"deck_size": 10, "enemy_per_turn": 2,
 		"round_cost": 15, "hand_price": 15, "prosthesis_price": 55,
 	},
 ]

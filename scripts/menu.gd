@@ -75,7 +75,7 @@ func _show_main() -> void:
 func _show_difficulty() -> void:
 	_clear()
 	_centered(UiKit.label("VYBER SI OBTÍŽNOST", UiKit.FS_XL, UiKit.C_GOLD_LIGHT, true))
-	_centered(UiKit.label("Ovlivní cenu dalšího kola a ceny v baru.", UiKit.FS_M, UiKit.C_PAPER, true))
+	_centered(UiKit.label("Mění velikost balíčku, ceny na úřadě a v baru.", UiKit.FS_M, UiKit.C_PAPER, true))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	_centered(row)
@@ -90,7 +90,7 @@ func _show_difficulty() -> void:
 func _difficulty_card(i: int) -> Control:
 	var d: Dictionary = GameState.DIFFICULTIES[i]
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(300, 230)
+	btn.custom_minimum_size = Vector2(300, 280)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.add_theme_stylebox_override("normal", UiKit.tex_style("ui/panel_frame.png", 12, 16))
 	btn.add_theme_stylebox_override("hover", UiKit.tex_style("ui/plaque.png", 12, 16))
@@ -116,6 +116,7 @@ func _difficulty_card(i: int) -> Control:
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(spacer)
+	vb.add_child(_price_row("Tvůj balíček", "%d karet" % d["deck_size"]))
 	vb.add_child(_price_row("Další kolo", "%d g" % d["round_cost"]))
 	vb.add_child(_price_row("Výkup ruky", "%d g" % d["hand_price"]))
 	vb.add_child(_price_row("Protéza", "%d g" % d["prosthesis_price"]))

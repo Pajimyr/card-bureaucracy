@@ -15,7 +15,7 @@ extends Control
 const LANE_COUNT := 3
 const SLOT_COUNT := 6
 const HAND_SIZE := 5
-const PLAYER_DECK_SIZE := 10
+# Velikost hráčova balíčku a tempo úředníka určuje obtížnost (GameState.DIFFICULTIES, docs/balance.md).
 const ENEMY_DECK_SIZE := 9
 const PLAYER_MAX_HP := 20
 const OFFICIAL_MAX_HP := 20
@@ -23,9 +23,9 @@ const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
 const SIDE_COLUMN_WIDTH := 230
 const MAX_CARDS_PER_TURN := 3  # strop pro hráče; useknuté ruce ho snižují (GameState.cards_per_turn)
-const ENEMY_CARDS_PER_TURN := 3  # kolik karet úředník nasadí za tah (balance: viz docs/balance.md)
 
-# Tutorial (první případ, dokud GameState.tutorial_done není true): menší balíčky a jeden úředník za tah.
+# Tutorial (první případ, dokud GameState.tutorial_done není true): menší balíčky, jeden úředník
+# za tah a nejde prohrát. Mrtvé karty se vracejí do balíčku, HP hráče neklesne pod 1.
 const TUT_PLAYER_CARDS := ["Razítko", "Formulář B-7", "Úřední lhůta", "Ověřená kopie", "Podpis pod tlakem", "Výpis z rejstříku", "Kopie kopie", "Stížnost"]
 const TUT_ENEMY_CARDS := ["Referent", "Úředník podatelny", "Revizor"]
 const TUT_ENEMY_CARDS_PER_TURN := 1
@@ -105,7 +105,7 @@ var player_hp: int = PLAYER_MAX_HP
 var official_hp: int = OFFICIAL_MAX_HP
 var placed_this_turn: int = 0
 var cards_per_turn: int = MAX_CARDS_PER_TURN  # hráčův limit, viz GameState.cards_per_turn()
-var enemy_cards_per_turn: int = ENEMY_CARDS_PER_TURN
+var enemy_cards_per_turn: int = 2
 var tutorial: bool = false
 var tut_dialog: DialogBox
 # Zásahy a útoky z aktuálního tahu, přehrají se postupně jako vizuální efekty.
@@ -178,8 +178,9 @@ func _ready() -> void:
 		enemy_deck = _make_fixed_deck(TUT_ENEMY_CARDS, ENEMY_POOL)
 		enemy_cards_per_turn = TUT_ENEMY_CARDS_PER_TURN
 	else:
-		player_deck = _make_deck(CARD_POOL, PLAYER_DECK_SIZE)
+		player_deck = _make_deck(CARD_POOL, GameState.diff()["deck_size"])
 		enemy_deck = _make_deck(ENEMY_POOL, ENEMY_DECK_SIZE)
+		enemy_cards_per_turn = GameState.diff()["enemy_per_turn"]
 	_build_ui()
 	tut_dialog = DialogBox.new()
 	add_child(tut_dialog)
@@ -227,6 +228,8 @@ func _tutorial_intro() -> void:
 			"text": "Dole máš karty v ruce. Přetáhni jednu na volný slot ve své přední řadě (horní řada zdola)."},
 		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
 			"text": "Na tah smíš zahrát tři karty. Až budeš hotov, klikni na POTVRDIT TAH. Úředník pak odpovídá."},
+		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+			"text": "Tady prohrát nemůžeš. Padlé karty se ti vrátí. Venku už ti nikdo nic nevrátí."},
 	])
 
 
@@ -1240,9 +1243,14 @@ func _cleanup_dead() -> Array:
 		for idx in SLOT_COUNT:
 			var card = board[idx]
 			if card != null and card["hp"] <= 0:
-				_log("%s padá a je ztracen." % card["name"])
-				_remove_from_deck(is_player, card["uid"])
 				board[idx] = null
+				if is_player and tutorial:
+					# V tutorialu se karta vrací do balíčku, aby nešlo prohrát vyčerpáním.
+					card["hp"] = card["max_hp"]
+					_log("%s padá, ale vrací se do balíčku." % card["name"])
+				else:
+					_log("%s padá a je ztracen." % card["name"])
+					_remove_from_deck(is_player, card["uid"])
 		for lane in LANE_COUNT:
 			var back_idx: int = lane + LANE_COUNT
 			if board[lane] == null and board[back_idx] != null:
@@ -1266,6 +1274,8 @@ func _resolve_combat() -> void:
 		passes += 1
 		_attack_pass(attackers)
 		attackers = _cleanup_dead()
+	if tutorial:
+		player_hp = maxi(player_hp, 1)
 
 
 func _check_end() -> bool:

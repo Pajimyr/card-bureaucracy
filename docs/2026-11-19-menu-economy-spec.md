@@ -1,7 +1,7 @@
 # Zadání pro Opuse: menu, tutoriál, město, groše, černý trh
 
 Datum: 2026-11-19
-Stav: schváleno k implementaci. Otevřené věci nejsou, rozhodnutí jsou níže.
+Stav: implementováno 2026-11-19. Odchylky od zadání jsou v sekci „Poznámky k implementaci“ na konci.
 
 ## Tón
 - **Hráč je krysa.** Drzý, pragmatický obchodník v šedé zóně, ne čestný občan.
@@ -65,3 +65,9 @@ Stav: schváleno k implementaci. Otevřené věci nejsou, rozhodnutí jsou níž
 - Balíček a ruka zůstávají v `main.gd`. Ekonomika a debuffy jdou do autoloadu `GameState`, aby přežily přechod scén.
 - Všechny nové obrazovky (menu, obtížnost, dialog, město, bar) držet ve stejné paletě a stylu jako existující UI (`assets/ui/`).
 - Pixel art přes `tools/gen_assets.py`, žádné ruční obrázky.
+
+## Poznámky k implementaci
+- Ruka se prodává jako karta „Tvoje ruka“. Náhodně se vybírá, která (levá, nebo pravá). Z balíčku se karty nemažou, protože balíček zatím mezi případy nepřežívá.
+- Jako nákup v baru je zatím jen **Protéza**: změní jeden debuff Bez ruky na buff a vrátí kartu za tah. Odpovídá konceptu (debuffy se léčí na černém trhu, jizva zůstává vidět).
+- Když krysa nemá na úřad a už nemá co prodat, hra skončí razítkem **KONEC KARIÉRY** a vrátí se do menu. Bez toho by se hráč zasekl.
+- Ceny podle obtížnosti (kolo / výkup ruky / protéza): Úřední hodiny 8/25/30, Pondělí ráno 10/20/40, Pátek 14:55 15/15/55. Jsou v `GameState.DIFFICULTIES`.

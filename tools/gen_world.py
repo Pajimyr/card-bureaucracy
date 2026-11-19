@@ -111,7 +111,7 @@ def towers(img, y_top_range, base_y, color, windows, lit, seed, x0=0, x1=None, a
 
 
 # --- Slumy (430x300) --------------------------------------------------------
-SLUM_W, SLUM_H = 430, 300
+SLUM_W, SLUM_H = 430, 318
 GROUND_Y = 236
 BAR_POS = (292, 236 - 145)  # levý horní roh baru v herních pixelech
 

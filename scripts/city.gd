@@ -1,0 +1,189 @@
+extends Control
+# Město po případu: vlevo slumy s barem (černý trh), vpravo stav krysy
+# (groše, debuffy a buffy) a pod tím úřad, kde se platí za další kolo.
+
+const CASE_SCENE := "res://scenes/main.tscn"
+const BAR_SCENE := "res://scenes/bar.tscn"
+const MENU_SCENE := "res://scenes/menu.tscn"
+const SLUMS_SIZE := Vector2(860, 636)
+const BAR_POS := Vector2(580, 178)  # (BAR_POS z tools/gen_world.py - 2px okraj sprite) × 2
+const CAPTION_IDLE := "Dolní město. Sem končí každý, koho úřad oškube."
+
+var caption: Label
+var urad_btn: TextureButton
+var urad_note: Label
+
+
+func _ready() -> void:
+	theme = UiKit.theme()
+	RenderingServer.set_default_clear_color(UiKit.C_DARK)
+
+	var bg := TextureRect.new()
+	bg.texture = UiKit.tex("bg/city.png")
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 12)
+	add_child(margin)
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 8)
+	margin.add_child(root)
+
+	root.add_child(_make_header())
+	var main := HBoxContainer.new()
+	main.add_theme_constant_override("separation", 10)
+	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(main)
+	main.add_child(_make_slums())
+	main.add_child(_make_side())
+
+	if GameState.is_stuck():
+		_career_over.call_deferred()
+
+
+func _make_header() -> Control:
+	var header := PanelContainer.new()
+	var sb := UiKit.tex_style("ui/plaque.png", 12)
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	sb.content_margin_left = 20
+	sb.content_margin_right = 20
+	header.add_theme_stylebox_override("panel", sb)
+	var hb := HBoxContainer.new()
+	header.add_child(hb)
+	hb.add_child(UiKit.label("SLUMY", UiKit.FS_M, UiKit.C_GOLD_LIGHT, true))
+	hb.add_child(UiKit.label("  ·  Dolní město, kam úřad nechodí", UiKit.FS_M, UiKit.C_PAPER, true))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(spacer)
+	hb.add_child(UiKit.label(GameState.diff()["name"].to_upper(), UiKit.FS_M, UiKit.C_PAPER_DIM, true))
+	return header
+
+
+# Slumy: obrázek, na něm klikatelný bar. Pod myší se rozsvítí a změní se popisek.
+func _make_slums() -> Control:
+	var frame := UiKit.panel("ui/panel_frame.png", 12, 6)
+	var area := Control.new()
+	area.custom_minimum_size = SLUMS_SIZE
+	area.clip_contents = true
+	frame.add_child(area)
+	var pic := TextureRect.new()
+	pic.texture = UiKit.tex("world/slums.png")
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area.add_child(pic)
+
+	var bar := UiKit.hotspot("world/bar.png", "world/bar_hover.png")
+	bar.position = BAR_POS
+	bar.pressed.connect(func() -> void: GameState.goto(BAR_SCENE))
+	bar.mouse_entered.connect(_set_caption.bind("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK))
+	bar.mouse_exited.connect(_set_caption.bind(CAPTION_IDLE, UiKit.C_PAPER))
+	area.add_child(bar)
+
+	var plate := UiKit.panel("ui/plaque_dark.png", 12, 10)
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.position = Vector2(12, SLUMS_SIZE.y - 56)
+	area.add_child(plate)
+	caption = UiKit.label(CAPTION_IDLE, UiKit.FS_M, UiKit.C_PAPER)
+	plate.add_child(caption)
+	return frame
+
+
+func _set_caption(text: String, color: Color) -> void:
+	caption.text = text
+	caption.add_theme_color_override("font_color", color)
+
+
+func _make_side() -> Control:
+	var side := VBoxContainer.new()
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 10)
+
+	# Stav krysy
+	var info := UiKit.panel("ui/panel_player.png", 12, 14)
+	side.add_child(info)
+	var ivb := VBoxContainer.new()
+	ivb.add_theme_constant_override("separation", 4)
+	info.add_child(ivb)
+	ivb.add_child(UiKit.label("STAV KRYSY", UiKit.FS_S, UiKit.C_GREY))
+	var money := HBoxContainer.new()
+	money.add_theme_constant_override("separation", 10)
+	ivb.add_child(money)
+	var coin := TextureRect.new()
+	coin.texture = UiKit.tex("icons/grose.png")
+	coin.custom_minimum_size = Vector2(48, 48)
+	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	coin.stretch_mode = TextureRect.STRETCH_SCALE
+	money.add_child(coin)
+	money.add_child(UiKit.label("%d grošů" % GameState.grose, UiKit.FS_L, UiKit.C_GOLD, true))
+	var result := "Poslední případ: "
+	var res_color := UiKit.C_GREY
+	match GameState.last_result:
+		"win":
+			result += "VÝHRA (+%d)" % GameState.WIN_REWARD
+			res_color = UiKit.C_GREEN
+		"lose":
+			result += "PROHRA"
+			res_color = UiKit.C_RED_LIGHT
+		_:
+			result += "žádný"
+	ivb.add_child(UiKit.label(result, UiKit.FS_M, res_color))
+	ivb.add_child(UiKit.label("Karet za tah: %d" % GameState.cards_per_turn(), UiKit.FS_M, UiKit.C_PAPER))
+
+	# Debuffy a buffy jako karty
+	var fx := UiKit.panel("ui/panel_frame.png", 12, 14)
+	side.add_child(fx)
+	var fvb := VBoxContainer.new()
+	fvb.add_theme_constant_override("separation", 6)
+	fx.add_child(fvb)
+	fvb.add_child(UiKit.label("DEBUFFY A BUFFY", UiKit.FS_S, UiKit.C_GREY))
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", 10)
+	cards.custom_minimum_size = Vector2(0, 104)
+	fvb.add_child(cards)
+	if GameState.effects.is_empty():
+		var none := UiKit.label("Zatím celá krysa.", UiKit.FS_M, UiKit.C_PAPER_DIM)
+		none.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cards.add_child(none)
+	for e in GameState.effects:
+		var def: Dictionary = GameState.EFFECTS[e["id"]]
+		cards.add_child(UiKit.effect_card(def["icon"], GameState.effect_title(e), def["short"], def["kind"] == "buff"))
+
+	# Úřad: další kolo za poplatek
+	var urad_box := VBoxContainer.new()
+	urad_box.add_theme_constant_override("separation", 4)
+	urad_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	urad_box.alignment = BoxContainer.ALIGNMENT_END
+	side.add_child(urad_box)
+	urad_btn = UiKit.hotspot("world/urad.png", "world/urad_hover.png", "world/urad_disabled.png")
+	urad_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	urad_btn.disabled = not GameState.can_afford_round()
+	urad_btn.pressed.connect(_on_urad)
+	urad_box.add_child(urad_btn)
+	var what := "DALŠÍ PŘÍPAD" if GameState.last_result == "win" else "OPAKOVAT PŘÍPAD"
+	var title := UiKit.label("ÚŘAD · %s" % what, UiKit.FS_M, UiKit.C_GOLD_LIGHT, true)
+	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	urad_box.add_child(title)
+	urad_note = UiKit.label("", UiKit.FS_M, UiKit.C_PAPER, true)
+	urad_note.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	urad_box.add_child(urad_note)
+	if urad_btn.disabled:
+		urad_note.text = "Nemáš na poplatek (%d g). Zkus bar." % GameState.round_cost()
+		urad_note.add_theme_color_override("font_color", UiKit.C_RED_LIGHT)
+		urad_btn.mouse_default_cursor_shape = Control.CURSOR_FORBIDDEN
+	else:
+		urad_note.text = "Poplatek: %d grošů" % GameState.round_cost()
+	return side
+
+
+func _on_urad() -> void:
+	if GameState.pay_round():
+		GameState.goto(CASE_SCENE)
+
+
+func _career_over() -> void:
+	UiKit.stamp_overlay(self, "KONEC KARIÉRY", "Bez grošů a bez rukou. Úřad vyhrál.", UiKit.C_RED, "HLAVNÍ MENU",
+		func() -> void: GameState.goto(MENU_SCENE))

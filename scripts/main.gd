@@ -22,7 +22,7 @@ const OFFICIAL_MAX_HP := 20
 const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
 const SIDE_COLUMN_WIDTH := 230
-const MAX_CARDS_PER_TURN := 3
+const MAX_CARDS_PER_TURN := 3  # strop pro obě strany; hráči ho snižují useknuté ruce
 const EFFECT_STEP := 0.3
 const CARD_SIZE := Vector2(160, 104)
 const HAND_LIFT := 14.0  # o kolik se karta v ruce zvedne pod myší
@@ -41,12 +41,10 @@ const MAX_PHI := 0.5  # max. náklon karty (rad), aby se nikdy neprotočila
 const MAX_PHI_VEL := 8.0
 
 # Pixel font má základní velikost 12 a škáluje se jen celočíselně.
-const FS_S := 12
-const FS_M := 24
-const FS_L := 36
-const FS_XL := 48
-
-const ASSETS := "res://assets/"
+const FS_S := UiKit.FS_S
+const FS_M := UiKit.FS_M
+const FS_L := UiKit.FS_L
+const FS_XL := UiKit.FS_XL
 
 enum Phase { PLAYER, ENEMY, OVER }
 
@@ -73,18 +71,18 @@ const ENEMY_POOL := [
 	{"name": "Kontrolor", "atk": 3, "hp": 5, "icon": "kontrolor"},
 ]
 
-# Paleta (stejná jako v tools/gen_assets.py)
-const C_INK := Color("#1c1726")
-const C_PAPER := Color("#eee2bb")
-const C_PAPER_DIM := Color("#a8905f")
-const C_GOLD := Color("#f2c14e")
-const C_GOLD_LIGHT := Color("#fff08a")
-const C_RED := Color("#c43a3a")
-const C_RED_LIGHT := Color("#ee6b55")
-const C_BLUE_LIGHT := Color("#6f95e0")
-const C_GREEN := Color("#5fd35f")
-const C_GREY := Color("#9a9aab")
-const C_DARK := Color("#0e0b14")
+# Paleta a velikosti fontu jsou v UiKit.
+const C_INK := UiKit.C_INK
+const C_PAPER := UiKit.C_PAPER
+const C_PAPER_DIM := UiKit.C_PAPER_DIM
+const C_GOLD := UiKit.C_GOLD
+const C_GOLD_LIGHT := UiKit.C_GOLD_LIGHT
+const C_RED := UiKit.C_RED
+const C_RED_LIGHT := UiKit.C_RED_LIGHT
+const C_BLUE_LIGHT := UiKit.C_BLUE_LIGHT
+const C_GREEN := UiKit.C_GREEN
+const C_GREY := UiKit.C_GREY
+const C_DARK := UiKit.C_DARK
 
 const COLOR_TEXT := C_PAPER
 const COLOR_MUTED := C_GREY
@@ -100,6 +98,7 @@ var selected_uid: int = -1
 var player_hp: int = PLAYER_MAX_HP
 var official_hp: int = OFFICIAL_MAX_HP
 var placed_this_turn: int = 0
+var cards_per_turn: int = MAX_CARDS_PER_TURN  # hráčův limit, viz GameState.cards_per_turn()
 # Zásahy a útoky z aktuálního tahu, přehrají se postupně jako vizuální efekty.
 var hit_events: Array = []
 
@@ -153,7 +152,6 @@ var enemy_slot_panels: Array = []
 var official_panel: PanelContainer
 var player_panel: PanelContainer
 var log_lines: Array[String] = []
-var shake_tween: Tween
 
 var style_slot_player: StyleBoxTexture
 var style_slot_valid: StyleBoxTexture
@@ -162,6 +160,7 @@ var style_slot_valid: StyleBoxTexture
 func _ready() -> void:
 	randomize()
 	RenderingServer.set_default_clear_color(C_DARK)
+	cards_per_turn = GameState.cards_per_turn()
 	player_board = _empty_board()
 	enemy_board = _empty_board()
 	player_deck = _make_deck(CARD_POOL, PLAYER_DECK_SIZE)
@@ -188,61 +187,24 @@ func _empty_board() -> Array:
 
 # --- Styl: textury, font, téma ---------------------------------------------
 
+# Sdílené styly žijí v UiKit, tady jen krátké zkratky.
 func _tex(file: String) -> Texture2D:
-	return load(ASSETS + file)
+	return UiKit.tex(file)
 
 
-# 9-slice styl z textury. margin a content jsou v obrazovkových pixelech (textury jsou už 2x).
 func _tex_style(file: String, margin: int, content: int = -1, tile: bool = false) -> StyleBoxTexture:
-	var sb := StyleBoxTexture.new()
-	sb.texture = _tex(file)
-	sb.set_texture_margin_all(margin)
-	sb.set_content_margin_all(content if content >= 0 else margin)
-	if tile:
-		sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
-		sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
-	return sb
+	return UiKit.tex_style(file, margin, content, tile)
 
 
-func _make_theme() -> Theme:
-	font = load(ASSETS + "fonts/bureau.fnt")
-	font.fixed_size_scale_mode = TextServer.FIXED_SIZE_SCALE_INTEGER_ONLY
-	var th := Theme.new()
-	th.default_font = font
-	th.default_font_size = FS_M
-	th.set_color("font_color", "Label", COLOR_TEXT)
-
-	var normal := _tex_style("ui/btn_normal.png", 12)
-	normal.content_margin_top = 8
-	normal.content_margin_bottom = 16
-	var hover := _tex_style("ui/btn_hover.png", 12)
-	hover.content_margin_top = 8
-	hover.content_margin_bottom = 16
-	var pressed := _tex_style("ui/btn_pressed.png", 12)
-	pressed.content_margin_top = 12
-	pressed.content_margin_bottom = 12
-	var disabled := _tex_style("ui/btn_disabled.png", 12)
-	disabled.content_margin_top = 12
-	disabled.content_margin_bottom = 12
-	th.set_stylebox("normal", "Button", normal)
-	th.set_stylebox("hover", "Button", hover)
-	th.set_stylebox("pressed", "Button", pressed)
-	th.set_stylebox("disabled", "Button", disabled)
-	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
-	th.set_color("font_color", "Button", Color("#fff6da"))
-	th.set_color("font_hover_color", "Button", Color.WHITE)
-	th.set_color("font_pressed_color", "Button", C_GOLD_LIGHT)
-	th.set_color("font_disabled_color", "Button", C_GREY)
-	th.set_color("font_shadow_color", "Button", Color("#4a0f18"))
-	th.set_constant("shadow_offset_x", "Button", 2)
-	th.set_constant("shadow_offset_y", "Button", 2)
-	return th
+func _make_label(text: String, font_size: int, color: Color = COLOR_TEXT, shadow: bool = false) -> Label:
+	return UiKit.label(text, font_size, color, shadow)
 
 
 # --- Stavba UI -------------------------------------------------------------
 
 func _build_ui() -> void:
-	theme = _make_theme()
+	theme = UiKit.theme()
+	font = UiKit.font()
 	style_slot_player = _tex_style("ui/slot_player.png", 12, 4)
 	style_slot_valid = _tex_style("ui/slot_valid.png", 12, 4)
 
@@ -315,7 +277,7 @@ func _make_header() -> Control:
 	header.add_theme_stylebox_override("panel", sb)
 	var hb := HBoxContainer.new()
 	header.add_child(hb)
-	hb.add_child(_make_label("PŘÍPAD Č. 1", FS_M, C_GOLD_LIGHT, true))
+	hb.add_child(_make_label("PŘÍPAD Č. %d" % GameState.case_number, FS_M, C_GOLD_LIGHT, true))
 	hb.add_child(_make_label("  ·  Žádost o potvrzení totožnosti", FS_M, C_PAPER, true))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -494,7 +456,7 @@ func _make_enemy_hand() -> Control:
 
 
 func _make_player_panel() -> PanelContainer:
-	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Občan bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", PLAYER_MAX_HP)
+	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Krysa bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", PLAYER_MAX_HP)
 	player_panel = parts[0]
 	player_label = parts[2]
 	player_bar = parts[3]
@@ -664,19 +626,6 @@ func _make_bar(max_value: int, fill_file: String, bg_file: String, margin: int) 
 	return bar
 
 
-func _make_label(text: String, font_size: int, color: Color = COLOR_TEXT, shadow: bool = false) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
-	if shadow:
-		label.add_theme_color_override("font_shadow_color", C_DARK)
-		var off := maxi(font_size / FS_S, 1)  # 1 herní pixel stínu na každý stupeň zvětšení
-		label.add_theme_constant_override("shadow_offset_x", off)
-		label.add_theme_constant_override("shadow_offset_y", off)
-	return label
-
-
 # --- Karty a balíčky ------------------------------------------------------
 
 func _make_deck(pool: Array, count: int) -> Array:
@@ -840,14 +789,7 @@ func _float_text(node: Control, text: String, color: Color = COLOR_HIT) -> void:
 
 # Otřes obrazovky: celé UI poskočí o pár pixelů a vrátí se.
 func _shake(strength: float) -> void:
-	if shake_tween and shake_tween.is_valid():
-		shake_tween.kill()
-	shake_tween = create_tween()
-	for i in 6:
-		var amount := strength * (1.0 - i / 6.0)
-		var off := Vector2(randf_range(-1, 1), randf_range(-1, 1)).normalized() * amount
-		shake_tween.tween_property(self, "position", off.round(), 0.04)
-	shake_tween.tween_property(self, "position", Vector2.ZERO, 0.04)
+	UiKit.shake(self, strength)
 
 
 # Velký nápis přes stůl při změně tahu.
@@ -877,40 +819,18 @@ func _banner(text: String, color: Color) -> void:
 
 # Konec případu: přes obrazovku dopadne razítko SCHVÁLENO / ZAMÍTNUTO.
 func _end_stamp(won: bool) -> void:
-	var dim := ColorRect.new()
-	dim.color = Color(C_DARK, 0.0)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.z_index = 45
-	add_child(dim)
-	create_tween().tween_property(dim, "color:a", 0.6, 0.3)
-
 	var color := Color("#4f9a5a") if won else C_RED
-	var stamp := PanelContainer.new()
-	var sb := _tex_style("ui/stamp_frame.png", 12, 24)
-	sb.content_margin_top = 18
-	sb.content_margin_bottom = 18
-	stamp.add_theme_stylebox_override("panel", sb)
-	stamp.self_modulate = color
-	stamp.z_index = 50
-	var vb := VBoxContainer.new()
-	stamp.add_child(vb)
-	var big := _make_label("SCHVÁLENO" if won else "ZAMÍTNUTO", FS_XL * 2, color)
-	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(big)
-	var small := _make_label("Úředník padl. Případ vyhrán." if won else "Případ prohrán. Poplatky propadají úřadu.", FS_M, color)
-	small.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(small)
-	add_child(stamp)
-	stamp.reset_size()
-	stamp.pivot_offset = stamp.size / 2.0
-	stamp.position = (size - stamp.size) / 2.0
-	stamp.rotation = -0.12
-	stamp.scale = Vector2(3, 3)
-	stamp.modulate.a = 0.0
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(stamp, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_property(stamp, "modulate:a", 1.0, 0.1)
-	tw.chain().tween_callback(_shake.bind(10.0))
+	var sub := "Úředník padl. +%d grošů." % GameState.WIN_REWARD if won else "Případ prohrán. Poplatky propadají úřadu."
+	UiKit.stamp_overlay(self, "SCHVÁLENO" if won else "ZAMÍTNUTO", sub, color, "POKRAČOVAT", _on_case_finished.bind(won))
+
+
+# Po razítku: výhra i prohra vedou do města. Kdo prohrál a nemá na další kolo, jde rovnou do baru.
+func _on_case_finished(won: bool) -> void:
+	GameState.finish_case(won)
+	if not won and not GameState.can_afford_round():
+		GameState.goto("res://scenes/bar.tscn")
+	else:
+		GameState.goto("res://scenes/city.tscn")
 
 
 # --- Animace letu karty ----------------------------------------------------
@@ -1103,9 +1023,17 @@ func _drop_problem(idx: int) -> String:
 		return "Slot je obsazený."
 	if idx >= LANE_COUNT and player_board[idx - LANE_COUNT] == null:
 		return "Zadní řadu obsadíš až za kartou v přední řadě."
-	if placed_this_turn >= MAX_CARDS_PER_TURN:
-		return "Na tah můžeš zahrát jen %d karty." % MAX_CARDS_PER_TURN
+	if placed_this_turn >= cards_per_turn:
+		return "Na tah můžeš zahrát jen %s." % _cards_word(cards_per_turn)
 	return ""
+
+
+func _cards_word(n: int) -> String:
+	if n == 1:
+		return "1 kartu"
+	if n < 5:
+		return "%d karty" % n
+	return "%d karet" % n
 
 
 func _commit_drop(card: Dictionary, idx: int) -> void:
@@ -1338,10 +1266,13 @@ func _refresh() -> void:
 		Phase.OVER:
 			phase_label.text = "Konec případu"
 			phase_label.add_theme_color_override("font_color", C_GREY)
+	# Žetony: zlatý = ještě můžeš hrát, šedý = zahráno, rudý křížek = chybí ruka.
 	for i in energy_icons.size():
-		var left := MAX_CARDS_PER_TURN - placed_this_turn
-		var lit := phase == Phase.PLAYER and i < left
-		(energy_icons[i] as TextureRect).texture = _tex("icons/energy_on.png" if lit else "icons/energy_off.png")
+		var file := "icons/energy_lost.png"
+		if i < cards_per_turn:
+			var lit := phase == Phase.PLAYER and i < cards_per_turn - placed_this_turn
+			file = "icons/energy_on.png" if lit else "icons/energy_off.png"
+		(energy_icons[i] as TextureRect).texture = _tex(file)
 	confirm_btn.disabled = phase != Phase.PLAYER
 
 	official_bar.value = maxi(official_hp, 0)

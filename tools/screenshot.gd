@@ -1,35 +1,90 @@
 extends SceneTree
-# Spustí hlavní scénu v SubViewportu 1280x720, chvíli počká a uloží snímek.
-# godot --path . -s tools/screenshot.gd -- /tmp/shot.png [frames] [akce]
-# akce: "end_win" / "end_lose" razítko konce, "enemy" tah úředníka, "select" vybraná karta.
+# Spustí scénu v SubViewportu 1280x720, chvíli počká a uloží snímek.
+#   godot --path . -s tools/screenshot.gd -- out=/tmp/shot.png [scene=main] [frames=60]
+#       [setup=poor|hands|rich] [action=...] [after=40]
+# scene: main, menu, city, bar (scenes/<name>.tscn)
+# setup: stav GameState před načtením scény
+#   poor  = prohra, 0 grošů        hands = prohra, 5 grošů, obě ruce pryč
+#   rich  = výhra, 70 grošů, jedna ruka pryč a jedna protéza
+# action (po frames snímcích):
+#   main: end_win, end_lose, enemy, select
+#   menu: difficulty, intro       bar: honza (projde dialog až do obchodu)
+#   city: hover_bar
+
+var vp: SubViewport
+
 
 func _initialize() -> void:
-	var args := OS.get_cmdline_user_args()
-	var out := args[0] if args.size() > 0 else "/tmp/shot.png"
-	var frames := int(args[1]) if args.size() > 1 else 30
-	var action := args[2] if args.size() > 2 else ""
-	var vp := SubViewport.new()
+	var opts := {"out": "/tmp/shot.png", "scene": "main", "frames": "60", "setup": "", "action": "", "after": "40"}
+	for a in OS.get_cmdline_user_args():
+		var kv := a.split("=", true, 1)
+		if kv.size() == 2:
+			opts[kv[0]] = kv[1]
+	var gs: Node = root.get_node("GameState")
+	match opts["setup"]:
+		"poor":
+			gs.new_game(1)
+			gs.grose = 0
+			gs.last_result = "lose"
+		"hands":
+			gs.new_game(1)
+			gs.grose = 5
+			gs.last_result = "lose"
+			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "no_hand", "side": "right"}]
+		"rich":
+			gs.new_game(2)
+			gs.grose = 70
+			gs.last_result = "win"
+			gs.case_number = 3
+			gs.knows_password = true
+			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "prosthesis", "side": "right"}]
+	gs.knows_password = true
+
+	vp = SubViewport.new()
 	vp.size = Vector2i(1280, 720)
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# SubViewport má vlastní filtr (výchozí lineární), nastavení projektu platí jen pro okno.
+	vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	root.add_child(vp)
-	var scene: PackedScene = load("res://scenes/main.tscn")
-	var main := scene.instantiate()
-	vp.add_child(main)
-	for i in frames:
-		await process_frame
-	match action:
+	var scene: PackedScene = load("res://scenes/%s.tscn" % opts["scene"])
+	var node := scene.instantiate()
+	vp.add_child(node)
+	await _frames(int(opts["frames"]))
+
+	match opts["action"]:
 		"end_win":
-			main._end_stamp(true)
+			node._end_stamp(true)
 		"end_lose":
-			main._end_stamp(false)
+			node._end_stamp(false)
 		"enemy":
-			main._on_confirm_turn()
+			node._on_confirm_turn()
 		"select":
-			main.selected_uid = main.hand[0]["uid"]
-			main._refresh()
-	if action != "":
-		for i in int(args[3]) if args.size() > 3 else 40:
-			await process_frame
+			node.selected_uid = node.hand[0]["uid"]
+			node._refresh()
+		"difficulty":
+			node._show_difficulty()
+		"intro":
+			node._start_game(1)
+		"hover_bar":
+			node._set_caption("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK)
+		"honza":
+			# proklikat barmana: pozdrav, volba hesla, odpověď
+			for i in 6:
+				node.dialog._proceed()
+				await _frames(5)
+				if node.dialog._has_choices and not node.dialog._is_typing():
+					node.dialog._on_choice("honza")
+					await _frames(5)
+			for i in 4:
+				node.dialog._proceed()
+				await _frames(5)
+	if opts["action"] != "":
+		await _frames(int(opts["after"]))
 	await RenderingServer.frame_post_draw
-	vp.get_texture().get_image().save_png(out)
+	vp.get_texture().get_image().save_png(opts["out"])
 	quit()
+
+
+func _frames(n: int) -> void:
+	for i in n:
+		await process_frame

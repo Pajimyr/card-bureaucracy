@@ -9,6 +9,8 @@ extends Control
 # Když přední karta umře, zadní karta v tom pruhu postoupí a hned útočí.
 # Karta na nule je ztracená. Speciální schopnosti zatím nejsou.
 # Karty z ruky lze přetáhnout na slot (nebo kliknout kartu a pak slot). Tažená karta se kývá.
+#
+# Grafika je pixel art v mřížce 640x360 zvětšené 2x. Textury generuje tools/gen_assets.py.
 
 const LANE_COUNT := 3
 const SLOT_COUNT := 6
@@ -19,10 +21,11 @@ const PLAYER_MAX_HP := 20
 const OFFICIAL_MAX_HP := 20
 const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
-const SIDE_COLUMN_WIDTH := 220
+const SIDE_COLUMN_WIDTH := 230
 const MAX_CARDS_PER_TURN := 3
 const EFFECT_STEP := 0.3
-const CARD_SIZE := Vector2(170, 110)
+const CARD_SIZE := Vector2(160, 104)
+const HAND_LIFT := 14.0  # o kolik se karta v ruce zvedne pod myší
 const FLY_TIME := 0.4
 const DRAG_THRESHOLD := 8.0
 const DRAG_SCALE := 0.75
@@ -33,40 +36,58 @@ const PHYS_STEP := 1.0 / 240.0
 const VEL_SMOOTH := 40.0  # jak rychle se vyhlazuje rychlost myši (vyšší = méně zpoždění, víc šumu)
 const ACC_SMOOTH := 25.0  # vyhlazení zrychlení myši
 const MAX_HAND_ACC := 6000.0
-const SWING_GAIN := 0.2# jak silně vodorovné zrychlení ruky houpe kartou
+const SWING_GAIN := 0.2  # jak silně vodorovné zrychlení ruky houpe kartou
 const MAX_PHI := 0.5  # max. náklon karty (rad), aby se nikdy neprotočila
 const MAX_PHI_VEL := 8.0
+
+# Pixel font má základní velikost 12 a škáluje se jen celočíselně.
+const FS_S := 12
+const FS_M := 24
+const FS_L := 36
+const FS_XL := 48
+
+const ASSETS := "res://assets/"
 
 enum Phase { PLAYER, ENEMY, OVER }
 
 # Šablony karet. Každá instance dostane vlastní uid, max_hp a aktuální hp.
+# icon = soubor assets/icons/card_<icon>.png
 const CARD_POOL := [
-	{"name": "Formulář B-7", "atk": 2, "hp": 3},
-	{"name": "Razítko", "atk": 3, "hp": 2},
-	{"name": "Žádost o žádost", "atk": 1, "hp": 5},
-	{"name": "Úřední lhůta", "atk": 4, "hp": 2},
-	{"name": "Kopie kopie", "atk": 1, "hp": 2},
-	{"name": "Nahlédnutí do spisu", "atk": 1, "hp": 4},
-	{"name": "Podpis pod tlakem", "atk": 5, "hp": 4},
-	{"name": "Ověřená kopie", "atk": 2, "hp": 4},
-	{"name": "Stížnost", "atk": 2, "hp": 3},
-	{"name": "Výpis z rejstříku", "atk": 3, "hp": 3},
+	{"name": "Formulář B-7", "atk": 2, "hp": 3, "icon": "form"},
+	{"name": "Razítko", "atk": 3, "hp": 2, "icon": "stamp"},
+	{"name": "Žádost o žádost", "atk": 1, "hp": 5, "icon": "envelope"},
+	{"name": "Úřední lhůta", "atk": 4, "hp": 2, "icon": "hourglass"},
+	{"name": "Kopie kopie", "atk": 1, "hp": 2, "icon": "copies"},
+	{"name": "Nahlédnutí do spisu", "atk": 1, "hp": 4, "icon": "magnifier"},
+	{"name": "Podpis pod tlakem", "atk": 5, "hp": 4, "icon": "pen"},
+	{"name": "Ověřená kopie", "atk": 2, "hp": 4, "icon": "certified"},
+	{"name": "Stížnost", "atk": 2, "hp": 3, "icon": "complaint"},
+	{"name": "Výpis z rejstříku", "atk": 3, "hp": 3, "icon": "folder"},
 ]
 
 const ENEMY_POOL := [
-	{"name": "Referent", "atk": 2, "hp": 4},
-	{"name": "Revizor", "atk": 3, "hp": 3},
-	{"name": "Vedoucí odboru", "atk": 4, "hp": 4},
-	{"name": "Úředník podatelny", "atk": 1, "hp": 3},
-	{"name": "Kontrolor", "atk": 3, "hp": 5},
+	{"name": "Referent", "atk": 2, "hp": 4, "icon": "referent"},
+	{"name": "Revizor", "atk": 3, "hp": 3, "icon": "revizor"},
+	{"name": "Vedoucí odboru", "atk": 4, "hp": 4, "icon": "vedouci"},
+	{"name": "Úředník podatelny", "atk": 1, "hp": 3, "icon": "podatelna"},
+	{"name": "Kontrolor", "atk": 3, "hp": 5, "icon": "kontrolor"},
 ]
 
-const COLOR_ENEMY := Color(0.36, 0.2, 0.2)
-const COLOR_PLAYER := Color(0.2, 0.3, 0.36)
-const COLOR_CARD := Color(0.93, 0.9, 0.8)
-const COLOR_TEXT := Color(0.95, 0.95, 0.95)
-const COLOR_CARD_TEXT := Color(0.15, 0.12, 0.1)
-const COLOR_MUTED := Color(0.7, 0.7, 0.7)
+# Paleta (stejná jako v tools/gen_assets.py)
+const C_INK := Color("#1c1726")
+const C_PAPER := Color("#eee2bb")
+const C_PAPER_DIM := Color("#a8905f")
+const C_GOLD := Color("#f2c14e")
+const C_GOLD_LIGHT := Color("#fff08a")
+const C_RED := Color("#c43a3a")
+const C_RED_LIGHT := Color("#ee6b55")
+const C_BLUE_LIGHT := Color("#6f95e0")
+const C_GREEN := Color("#5fd35f")
+const C_GREY := Color("#9a9aab")
+const C_DARK := Color("#0e0b14")
+
+const COLOR_TEXT := C_PAPER
+const COLOR_MUTED := C_GREY
 const COLOR_ATTACK := Color(1.0, 0.92, 0.45)
 const COLOR_HIT := Color(1.0, 0.4, 0.4)
 const COLOR_PLACE := Color(0.6, 1.0, 0.6)
@@ -113,27 +134,34 @@ var enemy_hand_area: Control
 var enemy_hand_label: Label
 var enemy_hand_backs: Array = []
 
+var font: FontFile
 var hand_box: HBoxContainer
 var turn_label: Label
 var phase_label: Label
+var energy_icons: Array = []
 var confirm_btn: Button
-var log_label: Label
+var log_label: RichTextLabel
 var official_bar: ProgressBar
 var official_label: Label
 var player_bar: ProgressBar
 var player_label: Label
 var player_deck_label: Label
-var player_slot_contents: Array = []  # VBoxContainer podle indexu slotu
+var player_slot_contents: Array = []  # CenterContainer podle indexu slotu
 var enemy_slot_contents: Array = []
 var player_slot_panels: Array = []
 var enemy_slot_panels: Array = []
 var official_panel: PanelContainer
 var player_panel: PanelContainer
 var log_lines: Array[String] = []
+var shake_tween: Tween
+
+var style_slot_player: StyleBoxTexture
+var style_slot_valid: StyleBoxTexture
 
 
 func _ready() -> void:
 	randomize()
+	RenderingServer.set_default_clear_color(C_DARK)
 	player_board = _empty_board()
 	enemy_board = _empty_board()
 	player_deck = _make_deck(CARD_POOL, PLAYER_DECK_SIZE)
@@ -143,12 +171,12 @@ func _ready() -> void:
 	_begin()
 
 
-# Úvod: úředník nasadí svoje karty animovaně, až potom můžeš hrát ty.
+# Úvod: hraješ první, úředník nasazuje až po potvrzení tvého tahu.
 func _begin() -> void:
-	# Hraješ první. Úředník nasazuje až po potvrzení tvého tahu.
 	phase = Phase.PLAYER
 	_log("Případ začíná. Přetáhni kartu z ruky na volný slot, nebo klikni kartu a pak slot.")
 	_refresh()
+	_banner("TVŮJ TAH", C_GOLD_LIGHT)
 
 
 func _empty_board() -> Array:
@@ -158,256 +186,495 @@ func _empty_board() -> Array:
 	return board
 
 
+# --- Styl: textury, font, téma ---------------------------------------------
+
+func _tex(file: String) -> Texture2D:
+	return load(ASSETS + file)
+
+
+# 9-slice styl z textury. margin a content jsou v obrazovkových pixelech (textury jsou už 2x).
+func _tex_style(file: String, margin: int, content: int = -1, tile: bool = false) -> StyleBoxTexture:
+	var sb := StyleBoxTexture.new()
+	sb.texture = _tex(file)
+	sb.set_texture_margin_all(margin)
+	sb.set_content_margin_all(content if content >= 0 else margin)
+	if tile:
+		sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+		sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+	return sb
+
+
+func _make_theme() -> Theme:
+	font = load(ASSETS + "fonts/bureau.fnt")
+	font.fixed_size_scale_mode = TextServer.FIXED_SIZE_SCALE_INTEGER_ONLY
+	var th := Theme.new()
+	th.default_font = font
+	th.default_font_size = FS_M
+	th.set_color("font_color", "Label", COLOR_TEXT)
+
+	var normal := _tex_style("ui/btn_normal.png", 12)
+	normal.content_margin_top = 8
+	normal.content_margin_bottom = 16
+	var hover := _tex_style("ui/btn_hover.png", 12)
+	hover.content_margin_top = 8
+	hover.content_margin_bottom = 16
+	var pressed := _tex_style("ui/btn_pressed.png", 12)
+	pressed.content_margin_top = 12
+	pressed.content_margin_bottom = 12
+	var disabled := _tex_style("ui/btn_disabled.png", 12)
+	disabled.content_margin_top = 12
+	disabled.content_margin_bottom = 12
+	th.set_stylebox("normal", "Button", normal)
+	th.set_stylebox("hover", "Button", hover)
+	th.set_stylebox("pressed", "Button", pressed)
+	th.set_stylebox("disabled", "Button", disabled)
+	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	th.set_color("font_color", "Button", Color("#fff6da"))
+	th.set_color("font_hover_color", "Button", Color.WHITE)
+	th.set_color("font_pressed_color", "Button", C_GOLD_LIGHT)
+	th.set_color("font_disabled_color", "Button", C_GREY)
+	th.set_color("font_shadow_color", "Button", Color("#4a0f18"))
+	th.set_constant("shadow_offset_x", "Button", 2)
+	th.set_constant("shadow_offset_y", "Button", 2)
+	return th
+
+
 # --- Stavba UI -------------------------------------------------------------
 
 func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color(0.12, 0.13, 0.15)
+	theme = _make_theme()
+	style_slot_player = _tex_style("ui/slot_player.png", 12, 4)
+	style_slot_valid = _tex_style("ui/slot_valid.png", 12, 4)
+
+	var bg := TextureRect.new()
+	bg.texture = _tex("bg/city.png")
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 16)
+		margin.add_theme_constant_override(side, 12)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 10)
+	root.add_theme_constant_override("separation", 8)
 	margin.add_child(root)
 
-	# Hlavička
-	var header := HBoxContainer.new()
-	root.add_child(header)
-	header.add_child(_make_label("Případ č. 1: Žádost o potvrzení totožnosti", 20))
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(spacer)
-	turn_label = _make_label("", 16)
-	header.add_child(turn_label)
-	phase_label = _make_label("", 16)
-	header.add_child(phase_label)
+	root.add_child(_make_header())
 
-	# Střed: levý sloupec (strany) + pravý sloupec (řady slotů)
+	# Střed: levý sloupec (portréty), stůl s pruhy, pravý sloupec (stav, protokol, razítko)
 	var main := HBoxContainer.new()
-	main.add_theme_constant_override("separation", 16)
+	main.add_theme_constant_override("separation", 10)
 	main.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(main)
 
 	var left := VBoxContainer.new()
 	left.custom_minimum_size = Vector2(SIDE_COLUMN_WIDTH, 0)
-	left.add_theme_constant_override("separation", 12)
+	left.add_theme_constant_override("separation", 10)
 	main.add_child(left)
 	left.add_child(_make_official_panel())
 	left.add_child(_make_player_panel())
 
+	main.add_child(_make_board())
+
 	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(SIDE_COLUMN_WIDTH, 0)
 	right.add_theme_constant_override("separation", 10)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main.add_child(right)
+	right.add_child(_make_status_panel())
+	right.add_child(_make_log_panel())
+	confirm_btn = Button.new()
+	confirm_btn.text = "POTVRDIT TAH"
+	confirm_btn.custom_minimum_size = Vector2(0, 64)
+	confirm_btn.pressed.connect(_on_confirm_turn)
+	right.add_child(confirm_btn)
+
+	# Ruka na hraně stolu
+	var hand_area := PanelContainer.new()
+	hand_area.custom_minimum_size = Vector2(0, CARD_SIZE.y + HAND_LIFT + 4)
+	var strip := _tex_style("ui/hand_strip.png", 8, 0, true)
+	strip.content_margin_top = 6
+	hand_area.add_theme_stylebox_override("panel", strip)
+	root.add_child(hand_area)
+	hand_box = HBoxContainer.new()
+	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	hand_box.add_theme_constant_override("separation", 14)
+	hand_area.add_child(hand_box)
+
+
+func _make_header() -> Control:
+	var header := PanelContainer.new()
+	var sb := _tex_style("ui/plaque.png", 12)
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	sb.content_margin_left = 20
+	sb.content_margin_right = 20
+	header.add_theme_stylebox_override("panel", sb)
+	var hb := HBoxContainer.new()
+	header.add_child(hb)
+	hb.add_child(_make_label("PŘÍPAD Č. 1", FS_M, C_GOLD_LIGHT, true))
+	hb.add_child(_make_label("  ·  Žádost o potvrzení totožnosti", FS_M, C_PAPER, true))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(spacer)
+	hb.add_child(_make_label("MĚSTSKÝ ÚŘAD · PATRO -2", FS_S * 2, C_PAPER_DIM, true))
+	return header
+
+
+# Stůl: nahoře úředník za sklem, uprostřed hrana přepážky, dole tvůj stůl.
+func _make_board() -> Control:
+	var board := VBoxContainer.new()
+	board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	board.add_theme_constant_override("separation", 0)
 
 	enemy_slot_contents.resize(SLOT_COUNT)
 	player_slot_contents.resize(SLOT_COUNT)
 	enemy_slot_panels.resize(SLOT_COUNT)
 	player_slot_panels.resize(SLOT_COUNT)
-	_add_board_row(right, "Úředník, zadní", enemy_slot_contents, enemy_slot_panels, LANE_COUNT, COLOR_ENEMY, false)
-	_add_board_row(right, "Úředník, přední", enemy_slot_contents, enemy_slot_panels, 0, COLOR_ENEMY, false)
-	_add_board_row(right, "Tvoje, přední", player_slot_contents, player_slot_panels, 0, COLOR_PLAYER, true)
-	_add_board_row(right, "Tvoje, zadní", player_slot_contents, player_slot_panels, LANE_COUNT, COLOR_PLAYER, true)
 
-	# Ruka
-	root.add_child(_make_label("RUKA", 12, COLOR_MUTED))
-	hand_box = HBoxContainer.new()
-	hand_box.add_theme_constant_override("separation", 12)
-	hand_box.custom_minimum_size = Vector2(0, 130)
-	root.add_child(hand_box)
+	var enemy_desk := _make_desk("ui/desk_enemy.png")
+	board.add_child(enemy_desk)
+	var ev: VBoxContainer = enemy_desk.get_child(0)
+	_add_board_row(ev, "zadní", enemy_slot_contents, enemy_slot_panels, LANE_COUNT, false)
+	_add_board_row(ev, "přední", enemy_slot_contents, enemy_slot_panels, 0, false)
 
-	# Spodní lišta
-	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 16)
-	root.add_child(bottom)
-	confirm_btn = Button.new()
-	confirm_btn.text = "Potvrdit tah"
-	confirm_btn.custom_minimum_size = Vector2(180, 40)
-	confirm_btn.pressed.connect(_on_confirm_turn)
-	bottom.add_child(confirm_btn)
-	log_label = _make_label("", 14)
-	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	log_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bottom.add_child(log_label)
+	board.add_child(_make_counter())
+
+	var player_desk := _make_desk("ui/desk_player.png")
+	board.add_child(player_desk)
+	var pv: VBoxContainer = player_desk.get_child(0)
+	_add_board_row(pv, "přední", player_slot_contents, player_slot_panels, 0, true)
+	_add_board_row(pv, "zadní", player_slot_contents, player_slot_panels, LANE_COUNT, true)
+	return board
+
+
+func _make_desk(file: String) -> PanelContainer:
+	var desk := PanelContainer.new()
+	desk.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	desk.add_theme_stylebox_override("panel", _tex_style(file, 4, 8, true))
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	desk.add_child(vb)
+	return desk
+
+
+func _make_counter() -> Control:
+	var counter := Control.new()
+	counter.custom_minimum_size = Vector2(0, 24)
+	var strip := TextureRect.new()
+	strip.texture = _tex("ui/counter.png")
+	strip.stretch_mode = TextureRect.STRETCH_TILE
+	strip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	counter.add_child(strip)
+	var sign := PanelContainer.new()
+	var sb := _tex_style("ui/counter_sign.png", 8)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 2
+	sb.content_margin_bottom = 4
+	sign.add_theme_stylebox_override("panel", sb)
+	sign.add_child(_make_label("PŘEPÁŽKA Č. 3", FS_S, C_PAPER))
+	sign.set_anchors_preset(Control.PRESET_CENTER)
+	sign.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	sign.grow_vertical = Control.GROW_DIRECTION_BOTH
+	counter.add_child(sign)
+	return counter
 
 
 # Jedna řada: 3 sloty. Pokud is_player, jsou klikatelné a index slotu je first_index + pruh.
-func _add_board_row(parent: Control, row_name: String, contents: Array, panels: Array, first_index: int, color: Color, is_player: bool) -> void:
+func _add_board_row(parent: Control, row_name: String, contents: Array, panels: Array, first_index: int, is_player: bool) -> void:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 8)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(row)
 	for lane in LANE_COUNT:
 		var idx := first_index + lane
 		var click_index := idx if is_player else -1
-		var slot := _make_slot(row, "%s, pruh %d" % [row_name, lane + 1], color, click_index)
+		var slot := _make_slot(row, row_name, is_player, click_index)
 		contents[idx] = slot["content"]
 		panels[idx] = slot["panel"]
 
 
-func _make_official_panel() -> PanelContainer:
-	var panel := PanelContainer.new()
-	official_panel = panel
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _make_style(COLOR_ENEMY))
-	var vb := VBoxContainer.new()
-	panel.add_child(vb)
-	vb.add_child(_make_label(OFFICIAL_NAME, 18))
-	official_label = _make_label("", 14)
-	vb.add_child(official_label)
-	official_bar = _make_bar(OFFICIAL_MAX_HP, Color(0.85, 0.3, 0.3))
-	official_bar.custom_minimum_size = Vector2(0, 20)
-	vb.add_child(official_bar)
-	vb.add_child(_make_enemy_hand())
-	return panel
-
-
-# Ruka úředníka: rubové strany karet, ze kterých jeho karty vylétají.
-func _make_enemy_hand() -> Control:
-	var area := Control.new()
-	area.custom_minimum_size = Vector2(0, 74)
-	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	enemy_hand_area = area
-	var offsets := [Vector2(40, 12), Vector2(70, 6), Vector2(100, 12)]
-	var rots := [-0.14, 0.0, 0.14]
-	for i in ENEMY_HAND_SHOWN:
-		var back := Panel.new()
-		back.size = Vector2(46, 60)
-		back.position = offsets[i]
-		back.pivot_offset = back.size / 2.0
-		back.rotation = rots[i]
-		back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		back.add_theme_stylebox_override("panel", _make_back_style())
-		area.add_child(back)
-		enemy_hand_backs.append(back)
-	enemy_hand_label = _make_label("", 12, COLOR_MUTED)
-	enemy_hand_label.position = Vector2(0, 52)
-	area.add_child(enemy_hand_label)
-	return area
-
-
-func _make_back_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.25, 0.15, 0.15)
-	sb.border_color = Color(0.6, 0.4, 0.4)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
-	return sb
-
-
-func _make_player_panel() -> PanelContainer:
-	var panel := PanelContainer.new()
-	player_panel = panel
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _make_style(COLOR_PLAYER))
-	var vb := VBoxContainer.new()
-	panel.add_child(vb)
-	vb.add_child(_make_label("Ty", 18))
-	player_label = _make_label("", 14)
-	vb.add_child(player_label)
-	player_bar = _make_bar(PLAYER_MAX_HP, Color(0.35, 0.75, 0.35))
-	player_bar.custom_minimum_size = Vector2(0, 20)
-	vb.add_child(player_bar)
-	player_deck_label = _make_label("", 14)
-	vb.add_child(player_deck_label)
-	return panel
-
-
-func _make_slot(parent: Control, title: String, color: Color, click_index: int = -1) -> Dictionary:
+func _make_slot(parent: Control, row_name: String, is_player: bool, click_index: int = -1) -> Dictionary:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size = Vector2(0, 92)
+	panel.custom_minimum_size = Vector2(0, CARD_SIZE.y + 8)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", _make_style(color))
+	panel.add_theme_stylebox_override("panel", style_slot_player if is_player else _tex_style("ui/slot_enemy.png", 12, 4))
+	panel.set_meta("row_name", row_name)
 	parent.add_child(panel)
 
-	var vb := VBoxContainer.new()
-	panel.add_child(vb)
-	vb.add_child(_make_label(title, 11, COLOR_MUTED))
-
-	var content := VBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.add_child(content)
+	var content := CenterContainer.new()
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(content)
 
 	if click_index >= 0:
 		panel.gui_input.connect(_on_slot_input.bind(click_index))
 	return {"panel": panel, "content": content}
 
 
-func _make_card_panel(card: Dictionary) -> PanelContainer:
+# Rám portrétu + jméno + HP. Vrací [panel, vbox pro další obsah, hp label, hp bar].
+func _make_character_panel(style_file: String, portrait: String, title: String, subtitle: String, title_color: Color, bar_file: String, max_hp: int) -> Array:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = CARD_SIZE
-	panel.clip_contents = true
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", _make_style(COLOR_CARD))
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _tex_style(style_file, 12, 14))
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 8)
+	panel.add_child(vb)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	vb.add_child(top)
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", _tex_style("ui/plaque.png", 8, 4))
+	top.add_child(frame)
+	var pic := TextureRect.new()
+	pic.texture = _tex(portrait)
+	pic.custom_minimum_size = Vector2(80, 80)
+	frame.add_child(pic)
+
+	var info := VBoxContainer.new()
+	info.add_theme_constant_override("separation", 2)
+	top.add_child(info)
+	info.add_child(_make_label(title, FS_M, title_color, true))
+	info.add_child(_make_label(subtitle, FS_S, COLOR_MUTED))
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info.add_child(spacer)
+	var hp_label := _make_label("", FS_M, COLOR_TEXT, true)
+	info.add_child(hp_label)
+
+	var bar := _make_bar(max_hp, bar_file, "ui/bar_bg.png", 4)
+	bar.custom_minimum_size = Vector2(0, 18)
+	vb.add_child(bar)
+	return [panel, vb, hp_label, bar]
+
+
+func _make_official_panel() -> PanelContainer:
+	var parts := _make_character_panel("ui/panel_enemy.png", "portraits/official.png", "ÚŘEDNÍK", "Referát č. 1", C_RED_LIGHT, "ui/bar_red.png", OFFICIAL_MAX_HP)
+	official_panel = parts[0]
+	official_label = parts[2]
+	official_bar = parts[3]
+	(parts[1] as VBoxContainer).add_child(_make_enemy_hand())
+	return official_panel
+
+
+# Ruka úředníka: rubové strany karet, ze kterých jeho karty vylétají.
+func _make_enemy_hand() -> Control:
+	var area := Control.new()
+	area.custom_minimum_size = Vector2(0, 74)
+	area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	enemy_hand_area = area
+	var offsets := [Vector2(110, 12), Vector2(136, 6), Vector2(162, 12)]
+	var rots := [-0.14, 0.0, 0.14]
+	for i in ENEMY_HAND_SHOWN:
+		var back := TextureRect.new()
+		back.texture = _tex("ui/card_back_small.png")
+		back.size = Vector2(46, 60)
+		back.position = offsets[i]
+		back.pivot_offset = back.size / 2.0
+		back.rotation = rots[i]
+		back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		area.add_child(back)
+		enemy_hand_backs.append(back)
+	var cap := _make_label("RUKA", FS_S, COLOR_MUTED)
+	cap.position = Vector2(0, 14)
+	area.add_child(cap)
+	enemy_hand_label = _make_label("", FS_L, C_PAPER, true)
+	enemy_hand_label.position = Vector2(0, 30)
+	area.add_child(enemy_hand_label)
+	return area
+
+
+func _make_player_panel() -> PanelContainer:
+	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Občan bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", PLAYER_MAX_HP)
+	player_panel = parts[0]
+	player_label = parts[2]
+	player_bar = parts[3]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(_make_icon("icons/deck.png"))
+	player_deck_label = _make_label("", FS_M, COLOR_TEXT, true)
+	row.add_child(player_deck_label)
+	(parts[1] as VBoxContainer).add_child(row)
+	return player_panel
+
+
+func _make_status_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _tex_style("ui/panel_frame.png", 12, 14))
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	panel.add_child(vb)
+	turn_label = _make_label("", FS_L, C_GOLD, true)
+	vb.add_child(turn_label)
+	phase_label = _make_label("", FS_M, C_PAPER, true)
+	vb.add_child(phase_label)
+	vb.add_child(_make_label("ZAHRANÉ KARTY", FS_S, COLOR_MUTED))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	vb.add_child(row)
+	for i in MAX_CARDS_PER_TURN:
+		var icon := _make_icon("icons/energy_on.png")
+		row.add_child(icon)
+		energy_icons.append(icon)
+	return panel
+
+
+# Protokol: papír, nejnovější zápis dole. Starší řádky přetečou nahoru a oříznou se.
+func _make_log_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var sb := _tex_style("ui/paper.png", 12, 14)
+	sb.content_margin_left = 18
+	sb.content_margin_right = 16
+	panel.add_theme_stylebox_override("panel", sb)
 	var vb := VBoxContainer.new()
 	panel.add_child(vb)
-	_populate_card_view(vb, card, COLOR_CARD_TEXT)
+	vb.add_child(_make_label("PROTOKOL", FS_S, C_PAPER_DIM))
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(clip)
+	log_label = RichTextLabel.new()
+	log_label.bbcode_enabled = true
+	log_label.fit_content = true
+	log_label.scroll_active = false
+	log_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_label.add_theme_font_override("normal_font", font)
+	log_label.add_theme_font_size_override("normal_font_size", FS_M)
+	log_label.add_theme_color_override("default_color", C_INK)
+	log_label.add_theme_constant_override("paragraph_separation", 6)
+	log_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	log_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	clip.add_child(log_label)
+	return panel
+
+
+func _make_icon(file: String) -> TextureRect:
+	var icon := TextureRect.new()
+	icon.texture = _tex(file)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return icon
+
+
+# Vizuál karty: papír (hráč) nebo služební průkaz (úředník), ikona, jméno, ÚT, ŽIV a pruh.
+func _make_card_view(card: Dictionary, is_player: bool) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = CARD_SIZE
+	panel.size = CARD_SIZE
+	panel.clip_contents = true
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fill_card(panel, card, is_player)
+	return panel
+
+
+func _fill_card(panel: PanelContainer, card: Dictionary, is_player: bool) -> void:
+	for child in panel.get_children():
+		panel.remove_child(child)
+		child.queue_free()
+	var sb := _tex_style("ui/card_player.png" if is_player else "ui/card_enemy.png", 12, 8)
+	sb.content_margin_top = 8 if is_player else 14
+	sb.content_margin_left = 8
+	panel.add_theme_stylebox_override("panel", sb)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 2)
+	panel.add_child(vb)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	vb.add_child(top)
+	var icon := TextureRect.new()
+	icon.texture = _tex("icons/card_%s.png" % card.get("icon", "form"))
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	top.add_child(icon)
+	# Pevná šířka jména: bez ní se zalomení počítá při šířce 0 a karta se natáhne.
+	var name_label := _make_label(card["name"], FS_M, C_INK)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.custom_minimum_size = Vector2(CARD_SIZE.x - 16 - 32 - 6 - 4, 0)
+	name_label.max_lines_visible = 2
+	top.add_child(name_label)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(spacer)
+
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 4)
+	vb.add_child(stats)
+	stats.add_child(_make_icon("icons/atk.png"))
+	stats.add_child(_make_label(str(card["atk"]), FS_M, Color("#8a1e28")))
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stats.add_child(gap)
+	stats.add_child(_make_icon("icons/hp.png"))
+	var hp_now: int = maxi(card["hp"], 0)
+	var hp_color := Color("#2f8a44") if hp_now >= card["max_hp"] else Color("#8a1e28")
+	stats.add_child(_make_label("%d/%d" % [hp_now, card["max_hp"]], FS_M, hp_color))
+
+	var bar := _make_bar(card["max_hp"], "ui/bar_small_fill.png", "ui/bar_small_bg.png", 2)
+	bar.custom_minimum_size = Vector2(0, 6)
+	bar.value = hp_now
+	vb.add_child(bar)
+	_ignore_mouse(panel)
+
+
+func _fill_back(panel: PanelContainer) -> void:
+	for child in panel.get_children():
+		panel.remove_child(child)
+		child.queue_free()
+	panel.add_theme_stylebox_override("panel", _tex_style("ui/card_back.png", 12, 0))
+
+
+func _ignore_mouse(node: Node) -> void:
+	for child in node.get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ignore_mouse(child)
+
+
+func _make_card_panel(card: Dictionary) -> PanelContainer:
+	var panel := _make_card_view(card, true)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.gui_input.connect(_on_card_input.bind(card["uid"]))
 	return panel
 
 
-# Naplní kontejner obsahem karty (jméno, staty, ŽIV bar), nebo textem "prázdné".
-func _populate_card_view(container: VBoxContainer, card: Variant, text_color: Color) -> void:
-	for child in container.get_children():
-		container.remove_child(child)
-		child.queue_free()
-	if card == null:
-		container.add_child(_make_label("prázdné", 15, text_color))
-		return
-	# Bez zalamování: jinak se výška počítá při šířce 0 a karta se natáhne na stovky pixelů.
-	var name_label := _make_label(card["name"], 14, text_color)
-	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	name_label.clip_text = true
-	container.add_child(name_label)
-	container.add_child(_make_label(_stats_text(card), 12, text_color))
-	var bar := _make_bar(card["max_hp"], Color(0.35, 0.75, 0.35))
-	bar.value = maxi(card["hp"], 0)
-	container.add_child(bar)
-
-
-func _make_bar(max_value: int, color: Color) -> ProgressBar:
+func _make_bar(max_value: int, fill_file: String, bg_file: String, margin: int) -> ProgressBar:
 	var bar := ProgressBar.new()
 	bar.min_value = 0
 	bar.max_value = max_value
 	bar.value = max_value
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 12)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = color
-	fill.set_corner_radius_all(3)
-	bar.add_theme_stylebox_override("fill", fill)
-	var back := StyleBoxFlat.new()
-	back.bg_color = Color(0.1, 0.1, 0.1)
-	back.set_corner_radius_all(3)
-	bar.add_theme_stylebox_override("background", back)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("fill", _tex_style(fill_file, margin, 0))
+	bar.add_theme_stylebox_override("background", _tex_style(bg_file, margin, 0))
 	return bar
 
 
-func _make_label(text: String, font_size: int, color: Color = COLOR_TEXT) -> Label:
+func _make_label(text: String, font_size: int, color: Color = COLOR_TEXT, shadow: bool = false) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
+	if shadow:
+		label.add_theme_color_override("font_shadow_color", C_DARK)
+		var off := maxi(font_size / FS_S, 1)  # 1 herní pixel stínu na každý stupeň zvětšení
+		label.add_theme_constant_override("shadow_offset_x", off)
+		label.add_theme_constant_override("shadow_offset_y", off)
 	return label
-
-
-func _make_style(color: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(10)
-	return sb
 
 
 # --- Karty a balíčky ------------------------------------------------------
@@ -421,10 +688,6 @@ func _make_deck(pool: Array, count: int) -> Array:
 		card["max_hp"] = card["hp"]
 		deck.append(card)
 	return deck
-
-
-func _stats_text(card: Dictionary) -> String:
-	return "ÚT %d   ŽIV %d/%d" % [card["atk"], maxi(card["hp"], 0), card["max_hp"]]
 
 
 func _uids_of(cards: Array) -> Array:
@@ -476,7 +739,7 @@ func _fill_hand() -> void:
 # Max MAX_CARDS_PER_TURN za tah.
 func _enemy_place_animated() -> void:
 	var placed := 0
-	var from_center := enemy_hand_area.get_global_rect().get_center()
+	var from_center := enemy_hand_area.get_global_rect().get_center() + Vector2(50, 0)
 	for idx in SLOT_COUNT:
 		if placed >= MAX_CARDS_PER_TURN:
 			return
@@ -521,9 +784,19 @@ func _show_event(ev: Dictionary) -> void:
 			# Zvýrazňuje se jen tvůj útok. Když útočí úředník, zasažená karta je jediná animace.
 			if ev["is_player"]:
 				_flash(panel, COLOR_ATTACK)
+		"official":
+			_flash(panel, COLOR_HIT)
+			_flash(official_panel, COLOR_HIT)
+			_float_text(panel, "-%d" % ev["amount"], C_GOLD_LIGHT)
+			_shake(4.0)
+		"player":
+			_flash(panel, COLOR_HIT)
+			_flash(player_panel, COLOR_HIT)
+			_float_text(panel, "-%d" % ev["amount"], C_RED_LIGHT)
+			_shake(7.0)
 		_:
 			_flash(panel, COLOR_HIT)
-			_float_text(panel, "-%d" % ev["amount"])
+			_float_text(panel, "-%d" % ev["amount"], C_RED_LIGHT)
 
 
 func _panel_for_event(ev: Dictionary) -> Control:
@@ -546,18 +819,98 @@ func _flash(node: Control, color: Color) -> void:
 	node.set_meta("flash_tween", tw)
 
 
-# Plovoucí číslo nad panelem, které vyjede nahoru a zmizí.
-func _float_text(node: Control, text: String) -> void:
-	var label := _make_label(text, 26, COLOR_HIT)
+# Plovoucí číslo nad panelem: vyskočí, chvíli visí a zmizí.
+func _float_text(node: Control, text: String, color: Color = COLOR_HIT) -> void:
+	var label := _make_label(text, FS_L, color, true)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.z_index = 40
 	add_child(label)
 	var center := node.get_global_rect().get_center()
-	label.global_position = center - Vector2(12, 16)
+	label.global_position = center - Vector2(text.length() * 9, 20)
+	label.pivot_offset = Vector2(text.length() * 9, 18)
+	label.scale = Vector2(0.5, 0.5)
 	var start_y := label.global_position.y
+	var tw := create_tween()
+	tw.tween_property(label, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.set_parallel(true)
+	tw.tween_property(label, "global_position:y", start_y - 44.0, 0.9).set_delay(0.12)
+	tw.tween_property(label, "modulate:a", 0.0, 0.5).set_delay(0.5)
+	tw.chain().tween_callback(label.queue_free)
+
+
+# Otřes obrazovky: celé UI poskočí o pár pixelů a vrátí se.
+func _shake(strength: float) -> void:
+	if shake_tween and shake_tween.is_valid():
+		shake_tween.kill()
+	shake_tween = create_tween()
+	for i in 6:
+		var amount := strength * (1.0 - i / 6.0)
+		var off := Vector2(randf_range(-1, 1), randf_range(-1, 1)).normalized() * amount
+		shake_tween.tween_property(self, "position", off.round(), 0.04)
+	shake_tween.tween_property(self, "position", Vector2.ZERO, 0.04)
+
+
+# Velký nápis přes stůl při změně tahu.
+func _banner(text: String, color: Color) -> void:
+	var strip := PanelContainer.new()
+	var sb := _tex_style("ui/plaque_dark.png", 12)
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	strip.add_theme_stylebox_override("panel", sb)
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.z_index = 30
+	var label := _make_label(text, FS_XL, color, true)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	strip.add_child(label)
+	add_child(strip)
+	strip.size = Vector2(size.x, 0)
+	strip.reset_size()
+	strip.size.x = size.x
+	var y := size.y * 0.42 - strip.size.y / 2.0
+	strip.position = Vector2(-size.x, y)
+	var tw := create_tween()
+	tw.tween_property(strip, "position:x", 0.0, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(0.55)
+	tw.tween_property(strip, "position:x", size.x, 0.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_callback(strip.queue_free)
+
+
+# Konec případu: přes obrazovku dopadne razítko SCHVÁLENO / ZAMÍTNUTO.
+func _end_stamp(won: bool) -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(C_DARK, 0.0)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.z_index = 45
+	add_child(dim)
+	create_tween().tween_property(dim, "color:a", 0.6, 0.3)
+
+	var color := Color("#4f9a5a") if won else C_RED
+	var stamp := PanelContainer.new()
+	var sb := _tex_style("ui/stamp_frame.png", 12, 24)
+	sb.content_margin_top = 18
+	sb.content_margin_bottom = 18
+	stamp.add_theme_stylebox_override("panel", sb)
+	stamp.self_modulate = color
+	stamp.z_index = 50
+	var vb := VBoxContainer.new()
+	stamp.add_child(vb)
+	var big := _make_label("SCHVÁLENO" if won else "ZAMÍTNUTO", FS_XL * 2, color)
+	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(big)
+	var small := _make_label("Úředník padl. Případ vyhrán." if won else "Případ prohrán. Poplatky propadají úřadu.", FS_M, color)
+	small.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(small)
+	add_child(stamp)
+	stamp.reset_size()
+	stamp.pivot_offset = stamp.size / 2.0
+	stamp.position = (size - stamp.size) / 2.0
+	stamp.rotation = -0.12
+	stamp.scale = Vector2(3, 3)
+	stamp.modulate.a = 0.0
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(label, "global_position:y", start_y - 40.0, 0.9)
-	tw.tween_property(label, "modulate:a", 0.0, 0.9)
-	tw.finished.connect(label.queue_free)
+	tw.tween_property(stamp, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(stamp, "modulate:a", 1.0, 0.1)
+	tw.chain().tween_callback(_shake.bind(10.0))
 
 
 # --- Animace letu karty ----------------------------------------------------
@@ -582,11 +935,12 @@ func _set_pivot_world(global_point: Vector2, node: Control, local_point: Vector2
 
 
 # Karta přiletí z from_center do slotu idx. Obsah slotu se ukáže až po přistání.
+# Během letu se karta zvětší na plnou velikost, ve slotu leží v měřítku 1.
 func _fly_card(card: Dictionary, from_center: Vector2, from_rot: float, is_player: bool, idx: int, color: Color, flip: bool = false) -> Tween:
 	var panels: Array = player_slot_panels if is_player else enemy_slot_panels
 	var slot_panel: Control = panels[idx]
 	# Při flipu letí karta rubem nahoru a na půl cesty se otočí lícem.
-	var ghost := _make_ghost(card, not flip)
+	var ghost := _make_ghost(card, not flip, is_player)
 	ghost.size = CARD_SIZE
 	ghost.pivot_offset = CARD_SIZE / 2.0
 	ghost.scale = Vector2(DRAG_SCALE, DRAG_SCALE)
@@ -602,31 +956,27 @@ func _fly_card(card: Dictionary, from_center: Vector2, from_rot: float, is_playe
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(ghost, "rotation", 0.0, FLY_TIME)
 	tw.tween_method(_set_pivot_world.bind(ghost, CARD_SIZE / 2.0), from_center, target_center, FLY_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(ghost, "scale:y", 1.0, FLY_TIME)
 	if flip:
 		var ft := create_tween()
 		ft.tween_property(ghost, "scale:x", 0.02, 0.15)
-		ft.tween_callback(_apply_face.bind(ghost, card))
-		ft.tween_property(ghost, "scale:x", DRAG_SCALE, 0.15)
+		ft.tween_callback(_fill_card.bind(ghost, card, is_player))
+		ft.tween_property(ghost, "scale:x", 1.0, 0.15)
+	else:
+		tw.tween_property(ghost, "scale:x", 1.0, FLY_TIME)
 	tw.finished.connect(_on_fly_done.bind(ghost, key, slot_panel, color))
 	return tw
 
 
-func _make_ghost(card: Dictionary, face_up: bool) -> PanelContainer:
+func _make_ghost(card: Dictionary, face_up: bool, is_player: bool) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = CARD_SIZE
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if face_up:
-		_apply_face(panel, card)
+		_fill_card(panel, card, is_player)
 	else:
-		panel.add_theme_stylebox_override("panel", _make_back_style())
+		_fill_back(panel)
 	return panel
-
-
-func _apply_face(panel: PanelContainer, card: Dictionary) -> void:
-	panel.add_theme_stylebox_override("panel", _make_style(COLOR_CARD))
-	var vb := VBoxContainer.new()
-	panel.add_child(vb)
-	_populate_card_view(vb, card, COLOR_CARD_TEXT)
 
 
 func _on_fly_done(ghost: Control, key: String, slot_panel: Control, color: Color) -> void:
@@ -666,6 +1016,7 @@ func _start_drag() -> void:
 	var src = hand_panels.get(drag_uid)
 	if src is Control:
 		src.modulate.a = 0.25
+	_update_slot_highlights()
 
 
 func _process(delta: float) -> void:
@@ -697,7 +1048,6 @@ func _update_drag(mouse: Vector2, delta: float) -> void:
 
 
 func _drag_physics_step(hand_acc: Vector2, h: float) -> void:
-
 	# Karta v klidu stojí vzpřímeně. Bod uchopení je pivot, takže se naklání jen od zrychlení ruky
 	# a vrací se zpět. Vodorovné zrychlení ruky dává moment proti pohybu. Pokud držíš kartu pod
 	# středem, znaménko se obrátí (těžiště je nad pivotem).
@@ -779,6 +1129,7 @@ func _return_drag() -> void:
 	drag_node = null
 	var src = hand_panels.get(drag_uid)
 	drag_uid = -1
+	_update_slot_highlights()
 	# Bod uchopení se vrací na místo, kde byl v ruce (karta v ruce má měřítko 1).
 	var grab := drag_grab
 	var start_point: Vector2 = node.get_global_transform() * grab
@@ -952,14 +1303,16 @@ func _on_confirm_turn() -> void:
 	hit_events.clear()
 	_log("Tah potvrzen. Úředník je na řadě.")
 	_refresh()
+	_banner("TAH ÚŘEDNÍKA", C_RED_LIGHT)
 
-	await get_tree().create_timer(ENEMY_TURN_DELAY).timeout
+	await get_tree().create_timer(ENEMY_TURN_DELAY + 0.4).timeout
 	await _enemy_place_animated()
 	_resolve_combat()
 	_refresh()
 	await _play_hit_effects()
 	if _check_end():
 		_refresh()
+		_end_stamp(official_hp <= 0 and player_hp > 0)
 		return
 
 	turn += 1
@@ -968,38 +1321,67 @@ func _on_confirm_turn() -> void:
 	phase = Phase.PLAYER
 	_log("Kolo %d. Na řadě jsi ty." % turn)
 	_refresh()
+	_banner("TVŮJ TAH", C_GOLD_LIGHT)
 
 
 # --- Zobrazení -------------------------------------------------------------
 
 func _refresh() -> void:
-	turn_label.text = "Kolo %d" % turn
+	turn_label.text = "KOLO %d" % turn
 	match phase:
 		Phase.PLAYER:
-			phase_label.text = "Tvůj tah · zahráno %d / %d" % [placed_this_turn, MAX_CARDS_PER_TURN]
+			phase_label.text = "Tvůj tah"
+			phase_label.add_theme_color_override("font_color", C_GOLD_LIGHT)
 		Phase.ENEMY:
 			phase_label.text = "Tah úředníka"
+			phase_label.add_theme_color_override("font_color", C_RED_LIGHT)
 		Phase.OVER:
 			phase_label.text = "Konec případu"
+			phase_label.add_theme_color_override("font_color", C_GREY)
+	for i in energy_icons.size():
+		var left := MAX_CARDS_PER_TURN - placed_this_turn
+		var lit := phase == Phase.PLAYER and i < left
+		(energy_icons[i] as TextureRect).texture = _tex("icons/energy_on.png" if lit else "icons/energy_off.png")
 	confirm_btn.disabled = phase != Phase.PLAYER
 
 	official_bar.value = maxi(official_hp, 0)
-	official_label.text = "HP %d / %d" % [maxi(official_hp, 0), OFFICIAL_MAX_HP]
+	official_label.text = "%d/%d" % [maxi(official_hp, 0), OFFICIAL_MAX_HP]
 	player_bar.value = maxi(player_hp, 0)
-	player_label.text = "HP %d / %d" % [maxi(player_hp, 0), PLAYER_MAX_HP]
-	player_deck_label.text = "Karet v balíčku: %d" % player_deck.size()
+	player_label.text = "%d/%d" % [maxi(player_hp, 0), PLAYER_MAX_HP]
+	player_deck_label.text = "Balíček: %d" % player_deck.size()
 	var in_hand := _available_cards(enemy_deck, _uids_of(enemy_board)).size()
-	enemy_hand_label.text = "Ruka úředníka: %d" % in_hand
+	enemy_hand_label.text = "%d" % in_hand
 	for i in enemy_hand_backs.size():
 		enemy_hand_backs[i].visible = i < in_hand
 
 	for idx in SLOT_COUNT:
 		if not hidden_slots.has(_hidden_key(true, idx)):
-			_populate_card_view(player_slot_contents[idx], player_board[idx], COLOR_TEXT)
+			_show_slot(player_slot_panels[idx], player_slot_contents[idx], player_board[idx], true)
 		if not hidden_slots.has(_hidden_key(false, idx)):
-			_populate_card_view(enemy_slot_contents[idx], enemy_board[idx], COLOR_TEXT)
+			_show_slot(enemy_slot_panels[idx], enemy_slot_contents[idx], enemy_board[idx], false)
 
+	_update_slot_highlights()
 	_rebuild_hand()
+
+
+# Obsah slotu: karta, nebo nenápadný popisek řady.
+func _show_slot(panel: Control, content: Control, card: Variant, is_player: bool) -> void:
+	for child in content.get_children():
+		content.remove_child(child)
+		child.queue_free()
+	if card == null:
+		var label := _make_label(str(panel.get_meta("row_name")).to_upper(), FS_S, Color(1, 1, 1, 0.18))
+		content.add_child(label)
+		return
+	content.add_child(_make_card_view(card, is_player))
+
+
+# Volné sloty, kam teď jde položit vybranou nebo taženou kartu, svítí zlatě.
+func _update_slot_highlights() -> void:
+	var holding := phase == Phase.PLAYER and (dragging or selected_uid != -1)
+	for idx in SLOT_COUNT:
+		var valid := holding and _drop_problem(idx) == ""
+		(player_slot_panels[idx] as Control).add_theme_stylebox_override("panel", style_slot_valid if valid else style_slot_player)
 
 
 func _rebuild_hand() -> void:
@@ -1008,19 +1390,45 @@ func _rebuild_hand() -> void:
 		child.queue_free()
 	hand_panels.clear()
 	for card in hand:
+		# Držák drží místo v řadě, karta v něm může vyjet nahoru.
+		var holder := Control.new()
+		holder.custom_minimum_size = CARD_SIZE + Vector2(0, HAND_LIFT)
+		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var panel := _make_card_panel(card)
-		panel.modulate = Color(1.0, 0.95, 0.5) if card["uid"] == selected_uid else Color.WHITE
+		panel.position = Vector2(0, HAND_LIFT)
+		var is_selected: bool = card["uid"] == selected_uid
+		if is_selected:
+			panel.position.y = 0
+			panel.modulate = Color(1.0, 0.95, 0.6)
 		if dragging and card["uid"] == drag_uid:
 			panel.modulate.a = 0.25
+		panel.mouse_entered.connect(_on_hand_hover.bind(panel, true))
+		panel.mouse_exited.connect(_on_hand_hover.bind(panel, false))
+		holder.add_child(panel)
 		hand_panels[card["uid"]] = panel
-		hand_box.add_child(panel)
+		hand_box.add_child(holder)
+
+
+func _on_hand_hover(panel: Control, inside: bool) -> void:
+	if not is_instance_valid(panel) or dragging:
+		return
+	var uid := -1
+	for k in hand_panels:
+		if hand_panels[k] == panel:
+			uid = k
+	var target := 0.0 if inside or uid == selected_uid else HAND_LIFT
+	create_tween().tween_property(panel, "position:y", target, 0.1)
 
 
 func _log(message: String) -> void:
 	log_lines.append(message)
-	while log_lines.size() > 3:
+	while log_lines.size() > 5:
 		log_lines.pop_front()
 	var text := ""
-	for line in log_lines:
-		text += line + "\n"
-	log_label.text = text.strip_edges()
+	for i in log_lines.size():
+		var newest := i == log_lines.size() - 1
+		var color := "#1c1726" if newest else "#8a7550"
+		text += "[color=%s]› %s[/color]" % [color, log_lines[i]]
+		if not newest:
+			text += "\n"
+	log_label.text = text

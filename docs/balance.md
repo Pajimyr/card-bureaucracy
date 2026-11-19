@@ -34,7 +34,7 @@ Obtížnost zatím mění jen ceny. Navrhuju, aby měnila i sílu úředníka. C
 | Pondělí ráno | 11 | 2 | 57 % |
 | Pátek 14:55 | 10 | 2 | 47 % |
 
-Úředník má všude 20 HP a balíček 9 karet. Současný stav (10 a 3) je v tabulce jako "Pátek" s tempem 3, a to je příliš těžké.
+Úředník má ve všech stupních 20 HP a balíček 9 karet. Současný stav (balíček 10, tempo 3) je těžší než nejtěžší navržený stupeň "Pátek 14:55" (tempo 2), a proto je hra téměř nevyhratelná.
 
 Konkrétní změny v kódu, až to schválíš:
 - `PLAYER_DECK_SIZE` nahradit hodnotou z `GameState.DIFFICULTIES` (nové pole `deck_size`).

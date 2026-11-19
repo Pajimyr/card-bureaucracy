@@ -13,7 +13,7 @@ import gen_assets as ga
 from gen_assets import CLEAR, c, dither, from_ascii, hline, mirror, new, px, rect, save, vline
 
 # Doplňkové barvy zadané hexem (gen_assets je registruje jen ve svém main).
-for _hex in ["#4a2d55", "#2a2140", "#5a4a7a", "#3a4a4a", "#7a2050", "#2a1a10", "#6a4a20"]:
+for _hex in ["#4a2d55", "#2a2140", "#5a4a7a", "#3a4a4a", "#7a2050", "#2a1a10", "#6a4a20", "#5a2040"]:
     ga.PAL[_hex] = _hex
 
 
@@ -214,7 +214,12 @@ def fire_barrel(img, x, y):
     vline(img, x + 2, y - 12, y, "G2")
     hline(img, x + 1, x + 9, y - 9, "K3")
     hline(img, x + 1, x + 9, y - 3, "K3")
-    flame = [
+    # Plamen se kreslí zvlášť jako animace (world/fire_N.png), viz FIRE_POS.
+
+
+FIRE_POS = (151, GROUND_Y + 4)  # levý horní roh plamene v herních pixelech
+FLAMES = [
+    [
         "....y.....",
         "...yY..y..",
         "..yYYy.Y..",
@@ -222,9 +227,31 @@ def fire_barrel(img, x, y):
         ".YwwwYYYy.",
         "yYwwwwYYYy",
         "YYwwwwwYYY",
-    ]
-    fimg = from_ascii(flame, {"y": "R3", "Y": "Y1", "w": "Y2"})
-    img.alpha_composite(fimg, (x + 1, y - 20))
+    ],
+    [
+        "......y...",
+        "..y..yY...",
+        "..Yy.YYy..",
+        ".yYYyYwYy.",
+        ".YYwwwwYY.",
+        "yYwwwwwYYy",
+        "YYwwwwwwYY",
+    ],
+    [
+        "...y......",
+        "...Yy..y..",
+        ".y.YYy.Yy.",
+        ".YyYwYyYY.",
+        "yYwwwwYYYy",
+        "YYwwwwwwYy",
+        "YYwwwwwYYY",
+    ],
+]
+
+
+def gen_fire() -> None:
+    for i, rows in enumerate(FLAMES):
+        save(from_ascii(rows, {"y": "R3", "Y": "Y1", "w": "Y2"}), f"world/fire_{i}.png")
 
 
 def gen_slums() -> None:
@@ -296,6 +323,17 @@ def gen_slums() -> None:
     img.alpha_composite(sit, (134, GROUND_Y + 13))
     img.alpha_composite(stand, (165, GROUND_Y + 10))
     img.alpha_composite(stand2, (143, GROUND_Y + 30))
+    # flaška u stojícího, stříkačky a prázdné lahve na zemi
+    rect(img, 172, GROUND_Y + 17, 173, GROUND_Y + 21, "O2")
+    px(img, 172, GROUND_Y + 16, "K0")
+    for (sx, sy) in [(60, GROUND_Y + 48), (96, GROUND_Y + 52), (190, GROUND_Y + 40)]:
+        hline(img, sx, sx + 3, sy, "G4")
+        px(img, sx + 4, sy, "G3")
+        px(img, sx - 1, sy, "R2")
+    for (bx, by) in [(80, GROUND_Y + 44), (205, GROUND_Y + 36), (118, GROUND_Y + 22)]:
+        hline(img, bx, bx + 4, by, "O2")
+        hline(img, bx, bx + 4, by + 1, "O3")
+        px(img, bx + 5, by, "K0")
     # ležící na kartonu
     rect(img, 40, GROUND_Y + 40, 76, GROUND_Y + 44, "W2")
     rect(img, 44, GROUND_Y + 36, 72, GROUND_Y + 41, "K0")
@@ -399,6 +437,7 @@ def make_bar(neon: str, glow: str, bright: bool) -> Image.Image:
 
 def gen_bar_outside() -> None:
     save(make_bar("N1", "#7a2050", False), "world/bar.png")
+    save(make_bar("#5a2040", None, False), "world/bar_off.png")
     save(make_bar("PK", "N1", True), "world/bar_hover.png")
 
 
@@ -567,7 +606,31 @@ def barman_sprite() -> Image.Image:
     # ruce na pultu
     rect(img, cx - 30, 80, cx - 18, 86, "S1")
     rect(img, cx + 18, 80, cx + 30, 86, "S1")
+    # zlomený nos, krev na zástěře, vězeňské tetování na pažích
+    px(img, cx + 1, 14, "R2")
+    px(img, cx + 2, 15, "R2")
+    for (bx, by) in [(cx - 8, 55), (cx - 7, 56), (cx + 6, 62), (cx + 9, 70), (cx - 3, 75), (cx + 2, 52)]:
+        px(img, bx, by, "R1")
+    for (tx, ty) in [(cx - 25, 42), (cx - 24, 43), (cx - 23, 44), (cx - 25, 44), (cx - 23, 42),
+                     (cx + 22, 50), (cx + 23, 51), (cx + 24, 50), (cx + 23, 49), (cx + 23, 53)]:
+        px(img, tx, ty, "B1")
     return outline(pad(img), "K0")
+
+
+BARMAN_POS = (282, COUNTER_Y - 88)  # levý horní roh spritu v herních pixelech
+BARMAN_VISIBLE_H = 88  # pod touto výškou ho zakrývá pult
+
+
+def gen_barman_frames() -> None:
+    """Barman za pultem, 2 snímky dechu (hlava a ramena o pixel dolů)."""
+    full = barman_sprite()
+    base = full.crop((0, 0, full.width, BARMAN_VISIBLE_H))
+    save(base, "world/barman_0.png")
+    breath = base.copy()
+    top = base.crop((0, 0, base.width, 40))
+    rect(breath, 0, 0, base.width - 1, 40, (0, 0, 0, 0))
+    breath.alpha_composite(top, (0, 1))
+    save(breath, "world/barman_1.png")
 
 
 def bar_base(curtain_open: bool) -> Image.Image:
@@ -679,12 +742,12 @@ def counter(img):
 
 
 def gen_bar_inside() -> None:
+    # Barman je samostatný animovaný sprite (gen_barman_frames), pozadí je bez něj.
     for name, opened in (("bar_inside", False), ("bar_inside_open", True)):
         img = bar_base(opened)
-        if not opened:
-            img.alpha_composite(barman_sprite(), (282, COUNTER_Y - 88))
         counter(img)
         save(img, f"world/{name}.png")
+    gen_barman_frames()
 
 
 def gen_back_room() -> None:
@@ -729,154 +792,13 @@ def gen_back_room() -> None:
     save(img, "world/back_room.png")
 
 
-# --- Portréty postav --------------------------------------------------------
-CHARLATAN_HALF = [
-    "....................",
-    "........kkkkkkkkkkkk",
-    "........khhhhhhhhhhh",
-    "........khhhhhhhhhhh",
-    "........khhhhhhhhhhh",
-    "........khhhhhhhhhhh",
-    "........kHHHHHHHHHHH",
-    "....kkkkkhhhhhhhhhhh",
-    "...khhhhhhhhhhhhhhhh",
-    "....kkkkksssssssssss",
-    ".......kssssssssssss",
-    ".......ksskkkkssssss",
-    ".......ksssekkssssss",
-    ".......kSssssssssssS",
-    ".......kSsssssssssSS",
-    "....mm.kSsssssmmmmmm",
-    ".....mmmmSssmmmmmmmm",
-    "........kSsssrrrrryr",
-    "........kSSsssssssss",
-    ".........kSSssssssss",
-    "..........kkSSSsssss",
-    "............kkkSSSSS",
-    "..........kkkkkwSSSS",
-    "......kkkkcccckwwwtt",
-    "....kkccccccccckwwtt",
-    "...kcccccccccccckwwt",
-    "..kcccccccccccccckww",
-    "..kccCcccccccccccckw",
-    ".kccCccccccccccccckw",
-    ".kccCcccccccyccccckw",
-    ".kccCccccccccyyccckw",
-    "kcccCccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-    "kccccccccccccccccckw",
-]
-
-BARMAN_HALF = [
-    "....................",
-    "....................",
-    "...........kkkkkkkkk",
-    ".........kksssssssss",
-    "........ksssssssssss",
-    ".......kssssssssssss",
-    ".......kssssssssssss",
-    ".......kSsssssssssss",
-    ".......kSskkkkksssss",
-    ".......kSssekkssssss",
-    "......kkSsssssssssss",
-    "......ksSssssssssSSs",
-    "......kkSsssssssSSSS",
-    ".......kbbbbsssbbbbb",
-    ".......kbbbbbbbbrrrr",
-    ".......kbbbbbbbbbbbb",
-    ".......kbbbbbbbbbbbb",
-    "........kbbbbbbbbbbb",
-    ".........kbbbbbbbbbb",
-    "..........kkbbbbbbbb",
-    "............kkkkbbbb",
-    "..............kSSSSS",
-    ".......kkkkkkkkSSSSS",
-    ".....kksssssstkSSSSS",
-    "....kssssssstttkSSSS",
-    "...ksssssssttttttttt",
-    "..kSssssssttaaaaaaaa",
-    "..kSsssssstaaaaaaaaa",
-    ".kSssssssstaaaaaaaaa",
-    ".kSssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-    "kSsssssssstaaaaaaaaa",
-]
-
-
-def alley_bg(img):
-    for y in range(40):
-        for x in range(40):
-            px(img, x, y, "PU" if dither(x, y, 0.3 + y / 80) else "K2")
-    for x0 in (2, 30):
-        rect(img, x0, 6, x0 + 6, 14, "K0")
-        rect(img, x0 + 1, 7, x0 + 5, 13, "N1" if x0 < 10 else "N2")
-
-
-def bar_bg(img):
-    for y in range(40):
-        for x in range(40):
-            px(img, x, y, "W0" if x % 7 else "#2a1a10")
-    rnd = random.Random(2)
-    for x in range(1, 40, 4):
-        col = rnd.choice(["O2", "R1", "B1", "Y0"])
-        rect(img, x, 4, x + 1, 10, col)
-    hline(img, 0, 39, 11, "W2")
-
-
-def gen_character_portraits() -> None:
-    ch_leg = {
-        "k": "K0", "h": "K2", "H": "R1", "s": "S1", "S": "S2", "e": "K0", "m": "W0",
-        "y": "Y1", "r": "R1", "w": "P3", "t": "R2", "c": "PU", "C": "PL",
-    }
-
-    def ch_fix(rows):
-        # šilhavé oko: na pravé straně jiné místo, zlatý zub jen jeden
-        rows = [list(r) for r in rows]
-        rows[17][21] = "r"
-        return ["".join(r) for r in rows]
-
-    save(ga.portrait(CHARLATAN_HALF, ch_leg, alley_bg, ch_fix), "portraits/charlatan.png")
-
-    bm_leg = {
-        "k": "K0", "s": "S1", "S": "S2", "e": "K0", "b": "W0", "r": "R1",
-        "t": "G4", "a": "P2",
-    }
-
-    def bm_fix(rows):
-        rows = [list(r) for r in rows]
-        # páska přes pravé oko a řemínek přes hlavu
-        for y in range(8, 11):
-            for x in range(25, 31):
-                rows[y][x] = "k"
-        for i, y in enumerate(range(3, 8)):
-            rows[y][26 - i * 3] = "k"
-            rows[y][27 - i * 3] = "k"
-        return ["".join(r) for r in rows]
-
-    save(ga.portrait(BARMAN_HALF, bm_leg, bar_bg, bm_fix), "portraits/barman.png")
-
-
 def main() -> None:
     gen_slums()
+    gen_fire()
     gen_bar_outside()
     gen_urad()
     gen_bar_inside()
     gen_back_room()
-    gen_character_portraits()
 
 
 if __name__ == "__main__":

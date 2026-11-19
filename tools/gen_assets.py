@@ -1084,158 +1084,6 @@ def gen_icons() -> None:
 
 
 # --- Portréty 40x40 ---------------------------------------------------------
-OFFICIAL_HALF = [
-    "....................",
-    "....................",
-    "....................",
-    "............kkkkkkkk",
-    "..........kkhhhsssss",
-    ".........khhssssssss",
-    "........khssssssssss",
-    "........kassssssssss",
-    ".......kaassssssssss",
-    ".......kaaSsssssssss",
-    ".......kaSskkkkkssss",
-    ".......kaSgggggggsss",
-    "......kkSsgwweeegggg",
-    "......ksSsgweeeegsss",
-    ".......kSsgggggggsss",
-    ".......kSsssssssssSs",
-    "........kSssssssssSS",
-    "........kSsssssmmmmm",
-    "........kSssssmmmmmm",
-    "........kSSsssrrrrrr",
-    ".........kSssrssssss",
-    ".........kSSssssssss",
-    "..........kSSsssssss",
-    "...........kkSSSssss",
-    ".............kkkSSSS",
-    "..............kSSSSS",
-    "..........kkkkkcSSSS",
-    "......kkkkjjjkccccct",
-    "....kkjjjjjjjjkccctt",
-    "...kjjjjjjjjjjjkcctt",
-    "..kjjjjjjjjjjjjjkctt",
-    "..kjjLjjjjjjjjjjjkTt",
-    ".kjjLjjjjjjjjjjjjkTt",
-    ".kjjLjjjjjjjjjjjjjkt",
-    ".kjjLjjjjjjjjjjjjjkt",
-    "kjjjLjjjjjjjjjjjjJkt",
-    "kjjjLjjjjjjjjjjjjJkT",
-    "kjjjjjjjjjjjjjjjjJkT",
-    "kjjjjjjjjjjjjjjjjJkk",
-    "kjjjjjjjjjjjjjjjjJkk",
-]
-
-# Hráč je krysa v mikině. Uši, čumák a vousy se zrcadlí.
-PLAYER_HALF = [
-    "....................",
-    "...kkkk.............",
-    "..kffffk............",
-    ".kfppppfk...........",
-    ".kfpPPpfk...........",
-    ".kfpPPpfk....kkkkkkk",
-    ".kfppppfkkkkffffffff",
-    "..kffffkffffffffffff",
-    "...kkkffffffffffffff",
-    ".....kffffffffffffff",
-    "....kfffflllffffffff",
-    "....kffffkkfffffffff",
-    "....kfffkewkffffffff",
-    "....kffffkkfffffllll",
-    ".....kffffffffllllll",
-    ".....kFfffffflllllll",
-    "..mm..kFffffllllllll",
-    "....mmmkFfflllllllll",
-    "..mm...kFFllllllllpp",
-    "........kFFlllllllPP",
-    ".........kFFllllllkl",
-    "..........kFFlllllkt",
-    "...........kFFllllkt",
-    "............kkFFFFkk",
-    "........kkbbbkkkkkFF",
-    "......kbbbbbbbbbbkFF",
-    "....kkbbbbbbbbbbbbkF",
-    "...kbbbbbbbbbbbbbbbk",
-    "..kbbbbbbbbbbbbbcbbk",
-    "..kbbbLbbbbbbbbbcbbk",
-    ".kbbbLbbbbbbbbbbcbbk",
-    ".kbbbLbbbbbbbbbbbbbk",
-    "kbbbbLbbbbbbbbbbbbbk",
-    "kbbbbLbbbbbbbbbbbbbk",
-    "kbbbbbbbbbbbbbbBBBBk",
-    "kbbbbbbbbbbbbbkkkkkk",
-    "kbbbbbbbbbbbbbkbbbbb",
-    "kbbbbbbbbbbbbbkbbbbb",
-    "kbbbbbbbbbbbbbkbbbbb",
-    "kbbbbbbbbbbbbbkbbbbb",
-]
-
-
-def portrait(half, legend, bg_fn, right_fix=None):
-    rows = [r.ljust(20, ".")[:20] for r in half]
-    rows = mirror(rows)
-    if right_fix:
-        rows = right_fix(rows)
-    img = new(40, 40)
-    bg_fn(img)
-    fig = from_ascii(rows, legend, 40)
-    img.alpha_composite(fig)
-    return img
-
-
-def official_bg(img):
-    for y in range(40):
-        for x in range(40):
-            px(img, x, y, "O2" if dither(x, y, y / 60) else "O1")
-    # rámeček s diplomem vlevo nahoře
-    rect(img, 2, 3, 10, 10, "K0")
-    rect(img, 3, 4, 9, 9, "P2")
-    hline(img, 4, 8, 5, "P0")
-    hline(img, 4, 7, 7, "P0")
-    px(img, 8, 8, "R2")
-    # plakát "§" vpravo nahoře, mimo hlavu
-    rect(img, 34, 2, 39, 10, "K0")
-    rect(img, 35, 3, 39, 9, "R1")
-    vline(img, 37, 4, 8, "Y1")
-    hline(img, 36, 38, 5, "Y1")
-    hline(img, 36, 38, 7, "Y1")
-
-
-def player_bg(img):
-    for y in range(40):
-        for x in range(40):
-            t = y / 40
-            px(img, x, y, "K3" if dither(x, y, 1 - t) else "K2")
-    rnd = random.Random(3)
-    for x0 in range(0, 40, 6):
-        top = rnd.randrange(14, 28)
-        rect(img, x0, top, x0 + 4, 39, "K1")
-        for wy in range(top + 2, 39, 3):
-            for wx in range(x0 + 1, x0 + 4, 2):
-                if rnd.random() < 0.35:
-                    px(img, wx, wy, rnd.choice(["Y1", "N2", "N1"]))
-
-
-def gen_portraits() -> None:
-    off_leg = {
-        "k": "K0", "s": "S1", "S": "S2", "h": "P4", "a": "G3", "g": "K0", "w": "P4", "e": "B1",
-        "m": "G2", "r": "R1", "c": "G4", "t": "R2", "T": "R1", "j": "G1", "J": "K3", "L": "G2",
-    }
-
-    def off_fix(rows):
-        # světlo zleva: na pravé půlce bez odlesku
-        return [r[:20] + r[20:].replace("h", "s") for r in rows]
-
-    save(portrait(OFFICIAL_HALF, off_leg, official_bg, off_fix), "portraits/official.png")
-
-    pl_leg = {
-        "k": "K0", "f": "G2", "F": "G1", "l": "G3", "p": "PK", "P": "PD", "e": "K0", "w": "P4",
-        "m": "G4", "t": "P4", "b": "B1", "B": "B0", "L": "B2", "c": "G4",
-    }
-    save(portrait(PLAYER_HALF, pl_leg, player_bg), "portraits/player.png")
-
-
 # --- Pozadí 640x360 ---------------------------------------------------------
 
 def gen_background() -> None:
@@ -1322,11 +1170,12 @@ def main() -> None:
     gen_hand_strip()
     gen_stamp()
     gen_icons()
-    gen_portraits()
     gen_background()
-    import gen_world  # scény města, baru a portréty postav
+    import gen_world  # scény města a baru
+    import gen_characters  # animované portréty postav
 
     gen_world.main()
+    gen_characters.main()
     print("assets ->", OUT)
 
 

@@ -41,6 +41,7 @@ var difficulty: int = 1
 var grose: int = START_GROSE
 var case_number: int = 1
 var knows_password: bool = false
+var tutorial_done: bool = false  # první případ je tutorial; po jeho dohrání se už nehraje
 var last_result: String = ""  # "", "win", "lose"
 # Efekty na krysu, např. {"id": "no_hand", "side": "left"}.
 var effects: Array = []
@@ -65,6 +66,7 @@ func new_game(diff: int) -> void:
 	grose = START_GROSE
 	case_number = 1
 	knows_password = false
+	tutorial_done = false
 	last_result = ""
 	effects.clear()
 

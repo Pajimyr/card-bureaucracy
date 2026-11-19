@@ -67,6 +67,33 @@ func _initialize() -> void:
 			node._start_game(1)
 		"hover_bar":
 			node._set_caption("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK)
+		"tutorial_play":
+			# Projde tutorial: dialogy odklikává, karty klade do volných slotů, potvrzuje tahy.
+			for turn_i in 12:
+				for i in 12:
+					if node.tut_dialog.visible:
+						node.tut_dialog._proceed()
+					await _frames(12)
+				if node.phase == node.Phase.OVER:
+					break
+				if node.phase != node.Phase.PLAYER:
+					continue
+				var idx := 0
+				for c in node.hand.duplicate():
+					if node.placed_this_turn >= node.cards_per_turn:
+						break
+					while idx < 6 and (node.player_board[idx] != null or (idx >= 3 and node.player_board[idx - 3] == null)):
+						idx += 1
+					if idx >= 6:
+						break
+					node._commit_drop_direct(c, idx)
+				await _frames(40)
+				node._on_confirm_turn()
+			for i in 40:
+				if node.tut_dialog.visible:
+					node.tut_dialog._proceed()
+				await _frames(20)
+			print("TUT result: phase=%s official=%d player=%d done=%s" % [node.phase, node.official_hp, node.player_hp, root.get_node("GameState").tutorial_done])
 		"honza":
 			# proklikat barmana: pozdrav, volba hesla, odpověď
 			for i in 6:

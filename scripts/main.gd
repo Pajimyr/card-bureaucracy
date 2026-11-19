@@ -22,7 +22,13 @@ const OFFICIAL_MAX_HP := 20
 const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
 const SIDE_COLUMN_WIDTH := 230
-const MAX_CARDS_PER_TURN := 3  # strop pro obě strany; hráči ho snižují useknuté ruce
+const MAX_CARDS_PER_TURN := 3  # strop pro hráče; useknuté ruce ho snižují (GameState.cards_per_turn)
+const ENEMY_CARDS_PER_TURN := 3  # kolik karet úředník nasadí za tah (balance: viz docs/balance.md)
+
+# Tutorial (první případ, dokud GameState.tutorial_done není true): menší balíčky a jeden úředník za tah.
+const TUT_PLAYER_CARDS := ["Razítko", "Formulář B-7", "Úřední lhůta", "Ověřená kopie", "Podpis pod tlakem", "Výpis z rejstříku", "Kopie kopie", "Stížnost"]
+const TUT_ENEMY_CARDS := ["Referent", "Úředník podatelny", "Revizor"]
+const TUT_ENEMY_CARDS_PER_TURN := 1
 const EFFECT_STEP := 0.3
 const CARD_SIZE := Vector2(160, 104)
 const HAND_LIFT := 14.0  # o kolik se karta v ruce zvedne pod myší
@@ -99,6 +105,9 @@ var player_hp: int = PLAYER_MAX_HP
 var official_hp: int = OFFICIAL_MAX_HP
 var placed_this_turn: int = 0
 var cards_per_turn: int = MAX_CARDS_PER_TURN  # hráčův limit, viz GameState.cards_per_turn()
+var enemy_cards_per_turn: int = ENEMY_CARDS_PER_TURN
+var tutorial: bool = false
+var tut_dialog: DialogBox
 # Zásahy a útoky z aktuálního tahu, přehrají se postupně jako vizuální efekty.
 var hit_events: Array = []
 
@@ -161,13 +170,35 @@ func _ready() -> void:
 	randomize()
 	RenderingServer.set_default_clear_color(C_DARK)
 	cards_per_turn = GameState.cards_per_turn()
+	tutorial = not GameState.tutorial_done
 	player_board = _empty_board()
 	enemy_board = _empty_board()
-	player_deck = _make_deck(CARD_POOL, PLAYER_DECK_SIZE)
-	enemy_deck = _make_deck(ENEMY_POOL, ENEMY_DECK_SIZE)
+	if tutorial:
+		player_deck = _make_fixed_deck(TUT_PLAYER_CARDS, CARD_POOL)
+		enemy_deck = _make_fixed_deck(TUT_ENEMY_CARDS, ENEMY_POOL)
+		enemy_cards_per_turn = TUT_ENEMY_CARDS_PER_TURN
+	else:
+		player_deck = _make_deck(CARD_POOL, PLAYER_DECK_SIZE)
+		enemy_deck = _make_deck(ENEMY_POOL, ENEMY_DECK_SIZE)
 	_build_ui()
+	tut_dialog = DialogBox.new()
+	add_child(tut_dialog)
 	_fill_hand()
 	_begin()
+
+
+# Balíček z pojmenovaných šablon (tutorial). Každá karta dostane vlastní uid.
+func _make_fixed_deck(names: Array, pool: Array) -> Array:
+	var deck: Array = []
+	for n in names:
+		for tpl in pool:
+			if tpl["name"] == n:
+				var card: Dictionary = tpl.duplicate()
+				card["uid"] = next_uid
+				next_uid += 1
+				card["max_hp"] = card["hp"]
+				deck.append(card)
+	return deck
 
 
 # Úvod: hraješ první, úředník nasazuje až po potvrzení tvého tahu.
@@ -176,6 +207,27 @@ func _begin() -> void:
 	_log("Případ začíná. Přetáhni kartu z ruky na volný slot, nebo klikni kartu a pak slot.")
 	_refresh()
 	_banner("TVŮJ TAH", C_GOLD_LIGHT)
+	if tutorial:
+		_tutorial_intro.call_deferred()
+
+
+# --- Tutorial --------------------------------------------------------------
+# Blokující dialogy v předem daných bodech tahu. Běží jen v prvním případu.
+
+func _tut(lines: Array) -> void:
+	if tutorial:
+		await tut_dialog.run(lines)
+
+
+func _tutorial_intro() -> void:
+	await _tut([
+		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+			"text": "Zkouška. Úřad tě nechce zabít, jen zkontrolovat, jestli umíš číst formuláře."},
+		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+			"text": "Dole máš karty v ruce. Přetáhni jednu na volný slot ve své přední řadě (horní řada zdola)."},
+		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+			"text": "Na tah smíš zahrát tři karty. Až budeš hotov, klikni na POTVRDIT TAH. Úředník pak odpovídá."},
+	])
 
 
 func _empty_board() -> Array:
@@ -685,12 +737,12 @@ func _fill_hand() -> void:
 
 
 # Úředník nasadí karty animovaně: nejdřív přední řadu, zadní jen za obsazenou přední.
-# Max MAX_CARDS_PER_TURN za tah.
+# Max enemy_cards_per_turn za tah.
 func _enemy_place_animated() -> void:
 	var placed := 0
 	var from_center := enemy_hand_area.get_global_rect().get_center() + Vector2(50, 0)
 	for idx in SLOT_COUNT:
-		if placed >= MAX_CARDS_PER_TURN:
+		if placed >= enemy_cards_per_turn:
 			return
 		if enemy_board[idx] != null:
 			continue
@@ -827,6 +879,8 @@ func _end_stamp(won: bool) -> void:
 # Po razítku: výhra i prohra vedou do města. Kdo prohrál a nemá na další kolo, jde rovnou do baru.
 func _on_case_finished(won: bool) -> void:
 	GameState.finish_case(won)
+	if won and tutorial:
+		GameState.tutorial_done = true
 	if not won and not GameState.can_afford_round():
 		GameState.goto("res://scenes/bar.tscn")
 	else:
@@ -1051,6 +1105,15 @@ func _commit_drop(card: Dictionary, idx: int) -> void:
 	_refresh()
 
 
+# Položí kartu bez tažení (testy a tutorial).
+func _commit_drop_direct(card: Dictionary, idx: int) -> void:
+	hand.erase(card)
+	player_board[idx] = card
+	placed_this_turn += 1
+	_fly_card(card, Vector2(400, 300), 0.0, true, idx, COLOR_PLACE)
+	_refresh()
+
+
 # Karta se vrátí do ruky, kývne se pružinou.
 func _return_drag() -> void:
 	var node := drag_node
@@ -1235,6 +1298,11 @@ func _on_confirm_turn() -> void:
 
 	await get_tree().create_timer(ENEMY_TURN_DELAY + 0.4).timeout
 	await _enemy_place_animated()
+	if turn == 1:
+		await _tut([
+			{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+				"text": "Úředník nasadil své karty. Teď útočí: každá přední karta bije protější kartu ve svém pruhu."},
+		])
 	_resolve_combat()
 	_refresh()
 	await _play_hit_effects()
@@ -1242,6 +1310,13 @@ func _on_confirm_turn() -> void:
 		_refresh()
 		_end_stamp(official_hp <= 0 and player_hp > 0)
 		return
+	if turn == 1:
+		await _tut([
+			{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+				"text": "Přebytek, který karta nezabije, propadne na zadní kartu za cílem. Když přední padne, zadní postoupí a hned útočí."},
+			{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": Color("#b45cff"),
+				"text": "Porazíš-li úředníka na nule, případ je tvůj. Dál to bude těžší. Hodně štěstí, krysáku."},
+		])
 
 	turn += 1
 	placed_this_turn = 0
@@ -1267,7 +1342,7 @@ func _refresh() -> void:
 			phase_label.text = "Konec případu"
 			phase_label.add_theme_color_override("font_color", C_GREY)
 	# Žetony: zlatý = ještě můžeš hrát, šedý = zahráno, rudý křížek = chybí ruka.
-	for i in energy_icons.size():
+	for i in energy_icons.size():  # žetony podle hráčova limitu
 		var file := "icons/energy_lost.png"
 		if i < cards_per_turn:
 			var lit := phase == Phase.PLAYER and i < cards_per_turn - placed_this_turn

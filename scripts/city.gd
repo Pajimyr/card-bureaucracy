@@ -8,6 +8,14 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 const SLUMS_SIZE := Vector2(860, 636)
 const BAR_POS := Vector2(580, 178)  # (BAR_POS z tools/gen_world.py - 2px okraj sprite) × 2
 const CAPTION_IDLE := "Dolní město. Sem končí každý, koho úřad oškube."
+const FIRE_POS := Vector2(302, 480)  # FIRE_POS z tools/gen_world.py × 2
+
+var fire: TextureRect
+var fire_frames: Array = []
+var fire_t := 0.0
+var bar_btn: TextureButton
+var bar_hovered := false
+var neon_t := 2.0
 
 var caption: Label
 var urad_btn: TextureButton
@@ -76,12 +84,20 @@ func _make_slums() -> Control:
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	area.add_child(pic)
 
+	fire_frames = [UiKit.tex("world/fire_0.png"), UiKit.tex("world/fire_1.png"), UiKit.tex("world/fire_2.png")]
+	fire = TextureRect.new()
+	fire.texture = fire_frames[0]
+	fire.position = FIRE_POS
+	fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area.add_child(fire)
+
 	var bar := UiKit.hotspot("world/bar.png", "world/bar_hover.png")
 	bar.position = BAR_POS
 	bar.pressed.connect(func() -> void: GameState.goto(BAR_SCENE))
-	bar.mouse_entered.connect(_set_caption.bind("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK))
-	bar.mouse_exited.connect(_set_caption.bind(CAPTION_IDLE, UiKit.C_PAPER))
+	bar.mouse_entered.connect(_on_bar_hover.bind(true))
+	bar.mouse_exited.connect(_on_bar_hover.bind(false))
 	area.add_child(bar)
+	bar_btn = bar
 
 	var plate := UiKit.panel("ui/plaque_dark.png", 12, 10)
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -90,6 +106,38 @@ func _make_slums() -> Control:
 	caption = UiKit.label(CAPTION_IDLE, UiKit.FS_M, UiKit.C_PAPER)
 	plate.add_child(caption)
 	return frame
+
+
+func _on_bar_hover(inside: bool) -> void:
+	bar_hovered = inside
+	bar_btn.texture_normal = UiKit.tex("world/bar.png")
+	if inside:
+		_set_caption("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK)
+	else:
+		_set_caption(CAPTION_IDLE, UiKit.C_PAPER)
+
+
+# Plamen v sudu se míhá, neon baru občas zabliká (rozbitý trafo, co jiného).
+func _process(delta: float) -> void:
+	fire_t += delta
+	if fire_t >= 0.12:
+		fire_t = 0.0
+		fire.texture = fire_frames[randi() % fire_frames.size()]
+	neon_t -= delta
+	if neon_t <= 0.0 and not bar_hovered:
+		_flicker_neon()
+		neon_t = randf_range(2.0, 6.0)
+
+
+func _flicker_neon() -> void:
+	var on := UiKit.tex("world/bar.png")
+	var off := UiKit.tex("world/bar_off.png")
+	var tw := create_tween()
+	for i in randi_range(1, 3):
+		tw.tween_callback(func() -> void: if not bar_hovered: bar_btn.texture_normal = off)
+		tw.tween_interval(randf_range(0.05, 0.15))
+		tw.tween_callback(func() -> void: bar_btn.texture_normal = on)
+		tw.tween_interval(randf_range(0.05, 0.2))
 
 
 func _set_caption(text: String, color: Color) -> void:

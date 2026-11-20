@@ -51,11 +51,8 @@ func _centered(node: Control) -> Control:
 func _show_main() -> void:
 	_clear()
 	var frame := UiKit.panel("ui/plaque.png", 8, 4)
-	var pic := TextureRect.new()
-	pic.texture = UiKit.tex(RAT)
-	pic.custom_minimum_size = Vector2(160, 160)
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_SCALE
+	var pic := CharacterPortrait.new()
+	pic.setup(RAT, 160)
 	frame.add_child(pic)
 	_centered(frame)
 	_centered(UiKit.label("CARD BUREAUCRACY", UiKit.FS_S * 6, UiKit.C_GOLD_LIGHT, true))

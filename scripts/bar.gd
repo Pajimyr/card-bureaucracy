@@ -7,6 +7,11 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 const BARMAN := "portraits/barman.png"
 const RAT := "portraits/player.png"
 const BARMAN_COLOR := Color("#ee6b55")
+const BARMAN_SPRITE_POS := Vector2(564, 280)  # BARMAN_POS z tools/gen_world.py × 2
+
+var barman_sprite: TextureRect
+var barman_frames: Array = []
+var barman_t := 0.0
 
 var bg: TextureRect
 var dialog: DialogBox
@@ -26,9 +31,23 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	add_child(bg)
+	barman_frames = [UiKit.tex("world/barman_0.png"), UiKit.tex("world/barman_1.png")]
+	barman_sprite = TextureRect.new()
+	barman_sprite.texture = barman_frames[0]
+	barman_sprite.position = BARMAN_SPRITE_POS
+	barman_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(barman_sprite)
 	dialog = DialogBox.new()
 	add_child(dialog)
 	_talk.call_deferred()
+
+
+# Barman za pultem dýchá (2 snímky).
+func _process(delta: float) -> void:
+	barman_t += delta
+	if barman_t >= 0.9:
+		barman_t = 0.0
+		barman_sprite.texture = barman_frames[1] if barman_sprite.texture == barman_frames[0] else barman_frames[0]
 
 
 func _barman(text: String, choices: Array = []) -> Dictionary:
@@ -71,7 +90,9 @@ func _ask() -> void:
 
 # Barman odhrne závěs, scéna se ztmaví a za ní je zadní místnost s obchodem.
 func _enter_back_room() -> void:
+	# Barman odešel odhrnout závěs.
 	bg.texture = UiKit.tex("world/bar_inside_open.png")
+	barman_sprite.visible = false
 	await get_tree().create_timer(0.4).timeout
 	var black := ColorRect.new()
 	black.color = Color(UiKit.C_DARK, 0.0)

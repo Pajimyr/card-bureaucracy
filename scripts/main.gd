@@ -159,6 +159,8 @@ var enemy_slot_contents: Array = []
 var player_slot_panels: Array = []
 var enemy_slot_panels: Array = []
 var official_panel: PanelContainer
+var official_portrait: CharacterPortrait
+var player_portrait: CharacterPortrait
 var player_panel: PanelContainer
 var log_lines: Array[String] = []
 
@@ -436,7 +438,7 @@ func _make_slot(parent: Control, row_name: String, is_player: bool, click_index:
 	return {"panel": panel, "content": content}
 
 
-# Rám portrétu + jméno + HP. Vrací [panel, vbox pro další obsah, hp label, hp bar].
+# Rám portrétu + jméno + HP. Vrací [panel, vbox pro další obsah, hp label, hp bar, portrét].
 func _make_character_panel(style_file: String, portrait: String, title: String, subtitle: String, title_color: Color, bar_file: String, max_hp: int) -> Array:
 	var panel := PanelContainer.new()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -451,9 +453,8 @@ func _make_character_panel(style_file: String, portrait: String, title: String, 
 	var frame := PanelContainer.new()
 	frame.add_theme_stylebox_override("panel", _tex_style("ui/plaque.png", 8, 4))
 	top.add_child(frame)
-	var pic := TextureRect.new()
-	pic.texture = _tex(portrait)
-	pic.custom_minimum_size = Vector2(80, 80)
+	var pic := CharacterPortrait.new()
+	pic.setup(portrait, 80)
 	frame.add_child(pic)
 
 	var info := VBoxContainer.new()
@@ -470,12 +471,13 @@ func _make_character_panel(style_file: String, portrait: String, title: String, 
 	var bar := _make_bar(max_hp, bar_file, "ui/bar_bg.png", 4)
 	bar.custom_minimum_size = Vector2(0, 18)
 	vb.add_child(bar)
-	return [panel, vb, hp_label, bar]
+	return [panel, vb, hp_label, bar, pic]
 
 
 func _make_official_panel() -> PanelContainer:
 	var parts := _make_character_panel("ui/panel_enemy.png", "portraits/official.png", "ÚŘEDNÍK", "Referát č. 1", C_RED_LIGHT, "ui/bar_red.png", OFFICIAL_MAX_HP)
 	official_panel = parts[0]
+	official_portrait = parts[4]
 	official_label = parts[2]
 	official_bar = parts[3]
 	(parts[1] as VBoxContainer).add_child(_make_enemy_hand())
@@ -513,6 +515,7 @@ func _make_enemy_hand() -> Control:
 func _make_player_panel() -> PanelContainer:
 	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Krysa bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", PLAYER_MAX_HP)
 	player_panel = parts[0]
+	player_portrait = parts[4]
 	player_label = parts[2]
 	player_bar = parts[3]
 	var row := HBoxContainer.new()
@@ -792,11 +795,13 @@ func _show_event(ev: Dictionary) -> void:
 			_flash(panel, COLOR_HIT)
 			_flash(official_panel, COLOR_HIT)
 			_float_text(panel, "-%d" % ev["amount"], C_GOLD_LIGHT)
+			official_portrait.hurt()
 			_shake(4.0)
 		"player":
 			_flash(panel, COLOR_HIT)
 			_flash(player_panel, COLOR_HIT)
 			_float_text(panel, "-%d" % ev["amount"], C_RED_LIGHT)
+			player_portrait.hurt()
 			_shake(7.0)
 		_:
 			_flash(panel, COLOR_HIT)

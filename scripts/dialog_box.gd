@@ -18,7 +18,7 @@ const CHARS_PER_SEC := 55.0
 
 var _name: Label
 var _text: Label
-var _pic: TextureRect
+var _pic: CharacterPortrait
 var _choices: VBoxContainer
 var _hint: Label
 var _typing: Tween
@@ -56,10 +56,7 @@ func _init() -> void:
 	var frame := UiKit.panel("ui/plaque.png", 8, 4)
 	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(frame)
-	_pic = TextureRect.new()
-	_pic.custom_minimum_size = Vector2(160, 160)
-	_pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_pic.stretch_mode = TextureRect.STRETCH_SCALE
+	_pic = CharacterPortrait.new()
 	frame.add_child(_pic)
 
 	var col := VBoxContainer.new()
@@ -99,7 +96,8 @@ func _show_line(line: Dictionary) -> void:
 	_name.text = str(line.get("who", ""))
 	_name.add_theme_color_override("font_color", line.get("color", UiKit.C_GOLD_LIGHT))
 	var portrait := str(line.get("portrait", ""))
-	_pic.texture = UiKit.tex(portrait) if portrait != "" else null
+	if portrait != "":
+		_pic.setup(portrait, 160)
 	_pic.get_parent().visible = portrait != ""
 	_text.text = str(line.get("text", ""))
 	_text.visible_ratio = 0.0
@@ -124,12 +122,14 @@ func _show_line(line: Dictionary) -> void:
 	var dur := maxf(_text.text.length() / CHARS_PER_SEC, 0.05)
 	_typing.tween_property(_text, "visible_ratio", 1.0, dur)
 	_typing.tween_callback(_finish_typing)
+	_pic.set_talking(true)  # pusa se hýbe, dokud se píše text
 
 
 func _finish_typing() -> void:
 	if _typing and _typing.is_valid():
 		_typing.kill()
 	_text.visible_ratio = 1.0
+	_pic.set_talking(false)
 	_choices.visible = _has_choices
 	_hint.visible = not _has_choices
 

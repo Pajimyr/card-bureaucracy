@@ -17,7 +17,7 @@ const SLOT_COUNT := 6
 const HAND_SIZE := 5
 # Velikost hráčova balíčku a tempo úředníka určuje obtížnost (GameState.DIFFICULTIES, docs/balance.md).
 const ENEMY_DECK_SIZE := 9
-const PLAYER_MAX_HP := 20
+const PLAYER_MAX_HP := 20  # bez zlomených žeber, viz GameState.player_max_hp()
 const OFFICIAL_MAX_HP := 20
 const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
@@ -102,6 +102,7 @@ var turn: int = 1
 var next_uid: int = 0
 var selected_uid: int = -1
 var player_hp: int = PLAYER_MAX_HP
+var player_max_hp: int = PLAYER_MAX_HP  # sníží ho zlomená žebra z rulety
 var official_hp: int = OFFICIAL_MAX_HP
 var placed_this_turn: int = 0
 var cards_per_turn: int = MAX_CARDS_PER_TURN  # hráčův limit, viz GameState.cards_per_turn()
@@ -172,6 +173,8 @@ func _ready() -> void:
 	randomize()
 	RenderingServer.set_default_clear_color(C_DARK)
 	cards_per_turn = GameState.cards_per_turn()
+	player_max_hp = GameState.player_max_hp()
+	player_hp = player_max_hp
 	tutorial = not GameState.tutorial_done
 	player_board = _empty_board()
 	enemy_board = _empty_board()
@@ -513,7 +516,7 @@ func _make_enemy_hand() -> Control:
 
 
 func _make_player_panel() -> PanelContainer:
-	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Krysa bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", PLAYER_MAX_HP)
+	var parts := _make_character_panel("ui/panel_player.png", "portraits/player.png", "TY", "Krysa bez razítka", C_BLUE_LIGHT, "ui/bar_green.png", player_max_hp)
 	player_panel = parts[0]
 	player_portrait = parts[4]
 	player_label = parts[2]
@@ -1294,10 +1297,7 @@ func _check_end() -> bool:
 		phase = Phase.OVER
 		_log("%s padl. Případ vyhrán." % OFFICIAL_NAME)
 		return true
-	if player_deck.is_empty():
-		phase = Phase.OVER
-		_log("Došly ti karty. Případ prohrán.")
-		return true
+	# Prázdný balíček už neprohrává: s prázdnou rukou nabídne šarlatán ruletu.
 	return false
 
 
@@ -1340,6 +1340,73 @@ func _on_confirm_turn() -> void:
 	_log("Kolo %d. Na řadě jsi ty." % turn)
 	_refresh()
 	_banner("TVŮJ TAH", C_GOLD_LIGHT)
+	if hand.is_empty() and not tutorial:
+		await get_tree().create_timer(0.8).timeout
+		await _offer_roulette()
+
+
+# --- Ruleta ----------------------------------------------------------------
+# Prázdná ruka: šarlatán nabídne ruletu (scripts/roulette.gd), nebo krysa ztratí tah.
+
+func _offer_roulette() -> void:
+	var col := Color("#b45cff")
+	var choice: String = await tut_dialog.run([
+		{"who": "Šarlatán", "portrait": "portraits/charlatan.png", "color": col,
+			"text": "Prázdné packy, co? Mám tu kolo štěstí. Tři políčka z osmi ti dají karty. Zbytek si vezme něco tvého.",
+			"choices": [
+				{"id": "spin", "text": "Zatočit ruletou."},
+				{"id": "skip", "text": "Ztratit tah."},
+			]},
+	])
+	if choice != "spin":
+		_log("Necháváš tah propadnout.")
+		_on_confirm_turn()
+		return
+	var seg: Dictionary = await Roulette.spin(self)
+	_apply_roulette(seg)
+
+
+func _apply_roulette(seg: Dictionary) -> void:
+	match seg["kind"]:
+		"cards":
+			for i in seg["n"]:
+				var card: Dictionary = CARD_POOL.pick_random().duplicate()
+				card["uid"] = next_uid
+				next_uid += 1
+				card["max_hp"] = card["hp"]
+				player_deck.append(card)
+				hand.append(card)
+			_log("Ruleta: %d nové karty do ruky." % seg["n"])
+			_float_text(player_panel, "+%d karty" % seg["n"], C_GOLD_LIGHT)
+		"hand":
+			var e := GameState.lose_hand()
+			if e.is_empty():
+				_break_rib()  # ruce už nejsou, tak aspoň žebro
+			else:
+				cards_per_turn = GameState.cards_per_turn()
+				_log("Ruleta: šarlatán si bere tvou %s ruku. Hraješ o kartu méně." % GameState.SIDE_ACC[e["side"]])
+				_float_text(player_panel, "-1 karta/tah", C_RED_LIGHT)
+				player_portrait.hurt()
+				_shake(8.0)
+		_:
+			_break_rib()
+	_refresh()
+
+
+# Zlomené žebro trvale sníží max HP. Aktuální HP se ořízne, ale nikdy ne pod 1.
+func _break_rib() -> void:
+	if GameState.break_rib():
+		player_max_hp = GameState.player_max_hp()
+		player_bar.max_value = player_max_hp
+		player_hp = maxi(1, mini(player_hp, player_max_hp))
+		_log("Ruleta: křup. Zlomené žebro, max HP je teď %d." % player_max_hp)
+		_float_text(player_panel, "-%d max HP" % GameState.RIB_HP, C_RED_LIGHT)
+	else:
+		player_hp = maxi(1, player_hp - GameState.RIB_HP)
+		_log("Ruleta: žebra už nemáš, tak tě šarlatán kopne. -%d HP." % GameState.RIB_HP)
+		_float_text(player_panel, "-%d HP" % GameState.RIB_HP, C_RED_LIGHT)
+	player_portrait.hurt()
+	_shake(10.0)
 
 
 # --- Zobrazení -------------------------------------------------------------
@@ -1368,7 +1435,7 @@ func _refresh() -> void:
 	official_bar.value = maxi(official_hp, 0)
 	official_label.text = "%d/%d" % [maxi(official_hp, 0), OFFICIAL_MAX_HP]
 	player_bar.value = maxi(player_hp, 0)
-	player_label.text = "%d/%d" % [maxi(player_hp, 0), PLAYER_MAX_HP]
+	player_label.text = "%d/%d" % [maxi(player_hp, 0), player_max_hp]
 	player_deck_label.text = "Balíček: %d" % player_deck.size()
 	var in_hand := _available_cards(enemy_deck, _uids_of(enemy_board)).size()
 	enemy_hand_label.text = "%d" % in_hand

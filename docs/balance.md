@@ -40,11 +40,30 @@ Obtížnost zatím mění jen ceny. Navrhuju, aby měnila i sílu úředníka. C
 - `GameState.DIFFICULTIES` má nová pole `deck_size` a `enemy_per_turn`, `main.gd` je čte místo pevných konstant.
 - Ceny zůstaly beze změny.
 
+## Ruleta místo prohry vyčerpáním (2026-11-20)
+
+Prázdný balíček už neprohrává. Když začne tvůj tah s prázdnou rukou (mimo tutorial), šarlatán nabídne ruletu, nebo můžeš tah nechat propadnout. Prohrává se jen na HP.
+
+Ruleta má 8 polí, 3 výherní: +2 karty, ŽEBRO, +3 karty, RUKA, ŽEBRO, +2 karty, ŽEBRO, ŽEBRO.
+
+- **Karty:** nové náhodné karty do balíčku i do ruky.
+- **Žebro:** trvalý debuff Zlomené žebro, max HP −4 (nejvýš 3 žebra, tedy max HP 8). Aktuální HP se ořízne, ale nikdy pod 1. Když už jsou zlomená 3 žebra, bere ruleta 4 aktuální HP (opět ne pod 1).
+- **Ruka:** zadarmo přijdeš o ruku (−1 karta za tah). Když už žádnou nemáš, je z toho žebro.
+
+Ruleta hru zlehčuje (s balíčkem 12 by heuristika vyhrála 77 % místo 67 %), proto se balíčky zmenšily o 2:
+
+| Obtížnost | Balíček | Výhra bez rulety (starý balíček) | Výhra s ruletou (nový balíček) |
+|---|---|---|---|
+| Úřední hodiny | 12 → 10 | 67 % | 62 % |
+| Pondělí ráno | 11 → 9 | 57 % | 54 % |
+| Pátek 14:55 | 10 → 8 | 47 % | 45 % |
+
+Simulace počítá s heuristikou, která vždycky točí, a s krysou bez debuffů. Žebra a ruce z rulety zůstávají i do dalších případů, takže každé točení má cenu, kterou tabulka nezachytí.
+
 ## Další možnosti (nepovinné)
 
 - **Záchrana balíčku:** karta, která zemře, zůstane v balíčku na konci případu s HP 1. Tím se jedna prohra nepromění v trvalou ztrátu. Snižuje to vyčerpání, ale mění to smysl "karta padá a je ztracen". Rozhodnutí je tvoje.
 - **Zvýšit počet zahraných karet na tah** pro hráče na 4 pro "Úřední hodiny". Tím se hodně zvedne výhra, ale prostředí se zjednoduší.
-- **Ukončení tahu bez nasazení:** dnes můžeš potvrdit tah i s prázdnou rukou. To je v pořádku, ale pokud úředník všechno zablokuje, nemáš co dělat. Tohle zatím neřeším.
 
 ## Tutorial
 

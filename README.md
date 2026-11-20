@@ -12,6 +12,8 @@ Otevři projekt v Godot 4.7 (`godot --path .`) nebo přes editor.
 
 - **Město:** vlevo slumy s barem, vpravo groše, debuffy a buffy jako karty, dole úřad. Na úřadě se platí za další kolo.
 - **Bar:** barmanovi řekneš „Jdu sem pro Honzu“ a za závěsem prodáš ruku (groše, ale o kartu méně za tah) nebo koupíš protézu.
+- **Ruleta:** když začne tvůj tah s prázdnou rukou, šarlatán nabídne ruletu (`scripts/roulette.gd`). Výhra jsou nové karty, prohra zlomené žebro (−4 max HP) nebo ruka. Prázdný balíček sám o sobě neprohrává.
+- **Postavy:** portréty jsou animované (`CharacterPortrait`, sheety z `tools/gen_characters.py`): dýchají, mrkají, mluví v dialogu a cuknou sebou při zásahu.
 - Stav hry drží autoload `GameState` (`scripts/game_state.gd`), sdílené UI je v `UiKit`, dialogy v `DialogBox`.
 
 ## Grafika

@@ -7,7 +7,7 @@ extends SceneTree
 #   poor  = prohra, 0 grošů        hands = prohra, 5 grošů, obě ruce pryč
 #   rich  = výhra, 70 grošů, jedna ruka pryč a jedna protéza
 # action (po frames snímcích):
-#   main: end_win, end_lose, enemy, select
+#   main: end_win, end_lose, enemy, select, roulette_offer, roulette, roulette_spin, rib
 #   menu: difficulty, intro       bar: honza (projde dialog až do obchodu)
 #   city: hover_bar
 
@@ -37,7 +37,8 @@ func _initialize() -> void:
 			gs.last_result = "win"
 			gs.case_number = 3
 			gs.knows_password = true
-			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "prosthesis", "side": "right"}]
+			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "prosthesis", "side": "right"}, {"id": "broken_rib"}, {"id": "broken_rib"}]
+			gs.tutorial_done = true
 	gs.knows_password = true
 
 	vp = SubViewport.new()
@@ -61,6 +62,35 @@ func _initialize() -> void:
 		"select":
 			node.selected_uid = node.hand[0]["uid"]
 			node._refresh()
+		"roulette_offer":
+			node.hand.clear()
+			node._refresh()
+			node._offer_roulette()
+		"roulette", "roulette_spin":
+			Roulette.spin(node)
+			if opts["action"] == "roulette_spin":
+				await _frames(5)
+				for c in node.get_children():
+					if c is Roulette:
+						c._on_spin()
+		"roulette_flow", "skip_flow":
+			# Prázdná ruka → dialog → volba → (ruleta → POKRAČOVAT). Vypíše výsledek.
+			node.hand.clear()
+			node._refresh()
+			node._offer_roulette()
+			await _frames(90)
+			node.tut_dialog._on_choice("spin" if opts["action"] == "roulette_flow" else "skip")
+			await _frames(10)
+			for c in node.get_children():
+				if c is Roulette:
+					c._on_spin()
+					await _frames(600)
+					c._btn.pressed.emit()
+			await _frames(60)
+			print("FLOW hand=%d phase=%s hp=%d/%d cpt=%d effects=%s" % [node.hand.size(), node.phase, node.player_hp, node.player_max_hp, node.cards_per_turn, gs.effects])
+		"rib":
+			node._apply_roulette({"kind": "rib"})
+			node._apply_roulette({"kind": "cards", "n": 3})
 		"difficulty":
 			node._show_difficulty()
 		"intro":

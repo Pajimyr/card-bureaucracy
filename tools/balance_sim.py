@@ -8,6 +8,30 @@ PLAYER_POOL = [(2,3),(3,2),(1,5),(4,2),(1,2),(1,4),(5,4),(2,4),(2,3),(3,3)]
 ENEMY_POOL  = [(2,4),(3,3),(4,4),(1,3),(3,5)]
 LANES = 3
 
+# Ruleta (main.gd / roulette.gd): 8 segmentů. ("cards", n) = n nových karet,
+# "rib" = zlomené žebro (-4 max HP), "hand" = přijdeš o ruku (-1 karta/tah).
+ROULETTE = [("cards",2),("rib",0),("cards",3),("hand",0),("rib",0),("cards",2),("rib",0),("rib",0)]
+RIB_HP = 4
+MAX_RIBS = 3
+
+def spin(st, alive, hand, rnd):
+    kind, n = rnd.choice(ROULETTE)
+    if kind == "hand" and st["cpt"] <= 1:
+        kind = "rib"
+    if kind == "cards":
+        new = mk(PLAYER_POOL, n, rnd)
+        alive.extend(new); hand.extend(new)
+    elif kind == "hand":
+        st["cpt"] -= 1
+    else:
+        if st["ribs"] < MAX_RIBS:
+            st["ribs"] += 1
+            st["maxhp"] -= RIB_HP
+            st["player"] = max(1, min(st["player"], st["maxhp"]))
+        else:
+            st["player"] = max(1, st["player"] - RIB_HP)
+    st["spins"] += 1
+
 def mk(pool, n, rnd):
     return [{"atk":a,"hp":h,"max":h} for a,h in (rnd.choice(pool) for _ in range(n))]
 
@@ -79,7 +103,8 @@ def game(cfg, rnd):
     edeck = mk(ENEMY_POOL, cfg["edeck"], rnd)
     P = [None]*6; E = [None]*6
     hand = []
-    st = {"player": cfg["php"], "official": cfg["ohp"], "lost": 0}
+    st = {"player": cfg["php"], "official": cfg["ohp"], "lost": 0,
+          "cpt": cfg["cpt"], "ribs": 0, "maxhp": cfg["php"], "spins": 0}
     alive = list(deck)
     def refill():
         while len(hand) < cfg["hand"]:
@@ -90,7 +115,9 @@ def game(cfg, rnd):
     turn = 0
     while turn < cfg["maxturns"]:
         turn += 1
-        place(P, alive, hand, min(cfg["cpt"], cfg["cpt_cap"](st) if "cpt_cap" in cfg else cfg["cpt"]), True, rnd)
+        if not hand and cfg.get("roulette", True):
+            spin(st, alive, hand, rnd)
+        place(P, alive, hand, st["cpt"], True, rnd)
         # enemy
         ealive = [c for c in edeck if c not in E]
         ecount = 0
@@ -108,7 +135,7 @@ def game(cfg, rnd):
             if c["hp"] <= 0: hand.remove(c)
         if st["official"] <= 0: return "win", turn
         if st["player"] <= 0: return "lose_hp", turn
-        if not alive: return "lose_deck", turn
+        if not alive and not cfg.get("roulette", True): return "lose_deck", turn
         refill()
     return "timeout", turn
 
@@ -116,6 +143,7 @@ def run(cfg, n=20000, seed=1):
     rnd = random.Random(seed)
     from collections import Counter
     res = Counter(); turns=[]
+    global LAST_ST
     for _ in range(n):
         r, t = game(cfg, rnd)
         res[r] += 1
@@ -125,14 +153,15 @@ def run(cfg, n=20000, seed=1):
     return wr, avg, dict(res)
 
 if __name__ == "__main__":
-    base = dict(pdeck=10, edeck=9, php=20, ohp=20, hand=5, cpt=3, ecpt=3, maxturns=80)
+    base = dict(pdeck=10, edeck=9, php=20, ohp=20, hand=5, cpt=3, ecpt=2, maxturns=80)
     tiers = {
-        "současný stav": {},
-        "Úřední hodiny (pdeck 12, ecpt 2)": {"pdeck": 12, "ecpt": 2},
-        "Pondělí ráno (pdeck 11, ecpt 2)": {"pdeck": 11, "ecpt": 2},
-        "Pátek 14:55 (pdeck 10, ecpt 2)": {"pdeck": 10, "ecpt": 2},
+        "bez rulety: Úřední hodiny (12)": {"pdeck": 12, "roulette": False},
+        "bez rulety: Pondělí ráno (11)": {"pdeck": 11, "roulette": False},
+        "bez rulety: Pátek 14:55 (10)": {"pdeck": 10, "roulette": False},
     }
+    for d in (12, 11, 10, 9, 8, 7):
+        tiers[f"ruleta: balíček {d}"] = {"pdeck": d}
     for name, ch in tiers.items():
         cfg = dict(base); cfg.update(ch)
         wr, avg, res = run(cfg, n=10000)
-        print(f"{name:36s} výhra {wr*100:5.1f} %  průměr kol {avg:.1f}  {res}")
+        print(f"{name:34s} výhra {wr*100:5.1f} %  průměr kol {avg:.1f}  {res}")

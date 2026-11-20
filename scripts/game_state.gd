@@ -7,6 +7,9 @@ const START_GROSE := 50
 const WIN_REWARD := 20
 const BASE_CARDS_PER_TURN := 3
 const HAND_SIDES := ["left", "right"]
+const PLAYER_MAX_HP := 20
+const RIB_HP := 4    # zlomené žebro z rulety bere tolik max HP
+const MAX_RIBS := 3  # víc žeber se lámat nedá, další smůla bere aktuální HP
 
 # Obtížnost mění velikost hráčova balíčku, tempo úředníka (karty za tah), cenu dalšího
 # kola a ceny v baru. Čísla vychází ze simulace, viz docs/balance.md.
@@ -14,19 +17,19 @@ const DIFFICULTIES := [
 	{
 		"name": "Úřední hodiny",
 		"desc": "Úředníci mají dobrou náladu. Skoro.",
-		"deck_size": 12, "enemy_per_turn": 2,
+		"deck_size": 10, "enemy_per_turn": 2,
 		"round_cost": 8, "hand_price": 25, "prosthesis_price": 30,
 	},
 	{
 		"name": "Pondělí ráno",
 		"desc": "Běžný provoz. Fronta až na chodbu.",
-		"deck_size": 11, "enemy_per_turn": 2,
+		"deck_size": 9, "enemy_per_turn": 2,
 		"round_cost": 10, "hand_price": 20, "prosthesis_price": 40,
 	},
 	{
 		"name": "Pátek 14:55",
 		"desc": "Za pět minut zavírají. Všechno je dražší.",
-		"deck_size": 10, "enemy_per_turn": 2,
+		"deck_size": 8, "enemy_per_turn": 2,
 		"round_cost": 15, "hand_price": 15, "prosthesis_price": 55,
 	},
 ]
@@ -35,6 +38,7 @@ const DIFFICULTIES := [
 const EFFECTS := {
 	"no_hand": {"kind": "debuff", "icon": "paw", "short": "-1 karta/tah"},
 	"prosthesis": {"kind": "buff", "icon": "prosthesis", "short": "karta zpět"},
+	"broken_rib": {"kind": "debuff", "icon": "rib", "short": "-%d HP" % RIB_HP},
 }
 
 const SIDE_ADJ := {"left": "Levá", "right": "Pravá"}
@@ -133,7 +137,35 @@ func effect_title(e: Dictionary) -> String:
 			return "Bez %s ruky" % SIDE_GEN[e["side"]]
 		"prosthesis":
 			return "%s protéza" % SIDE_ADJ[e["side"]]
+		"broken_rib":
+			return "Zlomené žebro"
 	return str(e["id"])
+
+
+func ribs() -> int:
+	return count_effect("broken_rib")
+
+
+func player_max_hp() -> int:
+	return PLAYER_MAX_HP - ribs() * RIB_HP
+
+
+# Ruleta zlomí žebro. Vrací false, když už není co lámat.
+func break_rib() -> bool:
+	if ribs() >= MAX_RIBS:
+		return false
+	effects.append({"id": "broken_rib"})
+	return true
+
+
+# Ruleta vezme ruku zadarmo. Vrací efekt, nebo prázdný slovník, když už žádná nezbývá.
+func lose_hand() -> Dictionary:
+	var sides := sellable_sides()
+	if sides.is_empty():
+		return {}
+	var e := {"id": "no_hand", "side": sides.pick_random()}
+	effects.append(e)
+	return e
 
 
 # Ruce, které krysa ještě má (prodaná ruka i s protézou už prodat nejde).

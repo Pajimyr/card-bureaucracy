@@ -1,6 +1,6 @@
 extends Control
 
-# Vizuální prototyp: jeden úředník proti hráči, střídání tahů.
+# Jeden případ: úředník daného patra (GameState.RANKS) proti hráči, střídání tahů.
 # Každá strana má 6 míst: 3 pruhy × 2 řady (přední a zadní).
 # Index slotu: 0..2 = přední řada pruhů 1..3, 3..5 = zadní řada pruhů 1..3.
 # Karta má sílu (ÚT) a health (ŽIV). Oba mají HP.
@@ -16,13 +16,14 @@ const LANE_COUNT := 3
 const SLOT_COUNT := 6
 const HAND_SIZE := 5
 # Velikost hráčova balíčku a tempo úředníka určuje obtížnost (GameState.DIFFICULTIES, docs/balance.md).
-const ENEMY_DECK_SIZE := 9
-const PLAYER_MAX_HP := 20  # bez zlomených žeber, viz GameState.player_max_hp()
-const OFFICIAL_MAX_HP := 20
+# HP a balíček úředníka určuje patro úřadu (GameState.RANKS).
+const PLAYER_MAX_HP := 20  # bez žeber a vest, viz GameState.player_max_hp()
+const TUT_OFFICIAL_HP := 20  # HP úředníka v tutorialu; jinak podle patra (GameState.RANKS)
 const OFFICIAL_NAME := "Úředník"
 const ENEMY_TURN_DELAY := 0.8
 const SIDE_COLUMN_WIDTH := 230
-const MAX_CARDS_PER_TURN := 3  # strop pro hráče; useknuté ruce ho snižují (GameState.cards_per_turn)
+const MAX_CARDS_PER_TURN := 3  # základ pro hráče; useknuté ruce ho snižují (GameState.cards_per_turn)
+const MAX_ENERGY_ICONS := 4  # 3 + kafe z automatu
 
 # Tutorial (první případ, dokud GameState.tutorial_done není true): menší balíčky, jeden úředník
 # za tah a nejde prohrát. Mrtvé karty se vracejí do balíčku, HP hráče neklesne pod 1.
@@ -75,7 +76,14 @@ const ENEMY_POOL := [
 	{"name": "Vedoucí odboru", "atk": 4, "hp": 4, "icon": "vedouci"},
 	{"name": "Úředník podatelny", "atk": 1, "hp": 3, "icon": "podatelna"},
 	{"name": "Kontrolor", "atk": 3, "hp": 5, "icon": "kontrolor"},
+	{"name": "Tajemník", "atk": 3, "hp": 6, "icon": "vedouci"},
+	{"name": "Ředitel", "atk": 5, "hp": 6, "icon": "reditel"},
 ]
+
+# Karty z černého trhu: do balíčku se přidají navíc podle efektů krysy (GameState.ITEMS).
+const BLACK_MARKET_CARDS := {
+	"fake_stamp": {"name": "Padělané razítko", "atk": 4, "hp": 4, "icon": "fake_stamp"},
+}
 
 # Paleta a velikosti fontu jsou v UiKit.
 const C_INK := UiKit.C_INK
@@ -103,7 +111,9 @@ var next_uid: int = 0
 var selected_uid: int = -1
 var player_hp: int = PLAYER_MAX_HP
 var player_max_hp: int = PLAYER_MAX_HP  # sníží ho zlomená žebra z rulety
-var official_hp: int = OFFICIAL_MAX_HP
+var official_max_hp: int = TUT_OFFICIAL_HP
+var official_hp: int = TUT_OFFICIAL_HP
+var coffee_bonus: int = 0  # kafe z automatu: +1 karta za tah, jen v tomto případu
 var placed_this_turn: int = 0
 var cards_per_turn: int = MAX_CARDS_PER_TURN  # hráčův limit, viz GameState.cards_per_turn()
 var enemy_cards_per_turn: int = 2
@@ -172,20 +182,30 @@ var style_slot_valid: StyleBoxTexture
 func _ready() -> void:
 	randomize()
 	RenderingServer.set_default_clear_color(C_DARK)
-	cards_per_turn = GameState.cards_per_turn()
 	player_max_hp = GameState.player_max_hp()
 	player_hp = player_max_hp
 	tutorial = not GameState.tutorial_done
 	player_board = _empty_board()
 	enemy_board = _empty_board()
+	var used := {}
 	if tutorial:
 		player_deck = _make_fixed_deck(TUT_PLAYER_CARDS, CARD_POOL)
 		enemy_deck = _make_fixed_deck(TUT_ENEMY_CARDS, ENEMY_POOL)
 		enemy_cards_per_turn = TUT_ENEMY_CARDS_PER_TURN
 	else:
+		var rank: Dictionary = GameState.current_rank()
 		player_deck = _make_deck(CARD_POOL, GameState.diff()["deck_size"])
-		enemy_deck = _make_deck(ENEMY_POOL, ENEMY_DECK_SIZE)
+		for id in BLACK_MARKET_CARDS:
+			player_deck += _make_fixed_deck([BLACK_MARKET_CARDS[id]["name"]], [BLACK_MARKET_CARDS[id]], GameState.count_effect(id))
+		var pool := ENEMY_POOL.filter(func(c: Dictionary) -> bool: return rank["pool"].has(c["name"]))
+		enemy_deck = _make_deck(pool, rank["deck"])
 		enemy_cards_per_turn = GameState.diff()["enemy_per_turn"]
+		official_max_hp = rank["hp"]
+		# Jednorázové zboží z baru se spotřebuje teď, na začátku případu.
+		used = GameState.consume_case_items()
+		coffee_bonus = used.get("coffee", 0)
+	official_hp = maxi(1, official_max_hp - used.get("bribe", 0) * GameState.BRIBE_HP)
+	cards_per_turn = GameState.cards_per_turn() + coffee_bonus
 	_build_ui()
 	tut_dialog = DialogBox.new()
 	add_child(tut_dialog)
@@ -193,17 +213,19 @@ func _ready() -> void:
 	_begin()
 
 
-# Balíček z pojmenovaných šablon (tutorial). Každá karta dostane vlastní uid.
-func _make_fixed_deck(names: Array, pool: Array) -> Array:
+# Balíček z pojmenovaných šablon (tutorial, karty z černého trhu). Každá karta dostane
+# vlastní uid. copies = kolik kusů od každého jména.
+func _make_fixed_deck(names: Array, pool: Array, copies: int = 1) -> Array:
 	var deck: Array = []
 	for n in names:
 		for tpl in pool:
 			if tpl["name"] == n:
-				var card: Dictionary = tpl.duplicate()
-				card["uid"] = next_uid
-				next_uid += 1
-				card["max_hp"] = card["hp"]
-				deck.append(card)
+				for i in copies:
+					var card: Dictionary = tpl.duplicate()
+					card["uid"] = next_uid
+					next_uid += 1
+					card["max_hp"] = card["hp"]
+					deck.append(card)
 	return deck
 
 
@@ -211,6 +233,10 @@ func _make_fixed_deck(names: Array, pool: Array) -> Array:
 func _begin() -> void:
 	phase = Phase.PLAYER
 	_log("Případ začíná. Přetáhni kartu z ruky na volný slot, nebo klikni kartu a pak slot.")
+	if official_hp < official_max_hp:
+		_log("Úplatek zabral: úředník začíná na %d HP." % official_hp)
+	if coffee_bonus > 0:
+		_log("Kafe z automatu: tento případ hraješ o kartu víc za tah.")
 	_refresh()
 	_banner("TVŮJ TAH", C_GOLD_LIGHT)
 	if tutorial:
@@ -337,12 +363,16 @@ func _make_header() -> Control:
 	header.add_theme_stylebox_override("panel", sb)
 	var hb := HBoxContainer.new()
 	header.add_child(hb)
+	var rank: Dictionary = GameState.current_rank()
 	hb.add_child(_make_label("PŘÍPAD Č. %d" % GameState.case_number, FS_M, C_GOLD_LIGHT, true))
-	hb.add_child(_make_label("  ·  Žádost o potvrzení totožnosti", FS_M, C_PAPER, true))
+	var what: String = "Zkouška: vyplň formulář" if tutorial else rank["case"]
+	hb.add_child(_make_label("  ·  %s" % what, FS_M, C_PAPER, true))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hb.add_child(spacer)
-	hb.add_child(_make_label("MĚSTSKÝ ÚŘAD · PATRO -2", FS_S * 2, C_PAPER_DIM, true))
+	var floor_text := "MĚSTSKÝ ÚŘAD · VRÁTNICE" if tutorial else \
+		"PATRO %d/%d · %s" % [GameState.rank + 1, GameState.RANKS.size(), rank["name"].to_upper()]
+	hb.add_child(_make_label(floor_text, FS_S * 2, C_RED_LIGHT if GameState.is_boss_case() and not tutorial else C_PAPER_DIM, true))
 	return header
 
 
@@ -478,7 +508,13 @@ func _make_character_panel(style_file: String, portrait: String, title: String, 
 
 
 func _make_official_panel() -> PanelContainer:
-	var parts := _make_character_panel("ui/panel_enemy.png", "portraits/official.png", "ÚŘEDNÍK", "Referát č. 1", C_RED_LIGHT, "ui/bar_red.png", OFFICIAL_MAX_HP)
+	var title := "ÚŘEDNÍK"
+	var subtitle := "Vrátný zkoušející"
+	if not tutorial:
+		var rank: Dictionary = GameState.current_rank()
+		title = rank["official"].to_upper()
+		subtitle = "Boss · poslední patro" if rank.get("boss", false) else "Patro %d" % (GameState.rank + 1)
+	var parts := _make_character_panel("ui/panel_enemy.png", "portraits/official.png", title, subtitle, C_RED_LIGHT, "ui/bar_red.png", official_max_hp)
 	official_panel = parts[0]
 	official_portrait = parts[4]
 	official_label = parts[2]
@@ -544,7 +580,7 @@ func _make_status_panel() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	vb.add_child(row)
-	for i in MAX_CARDS_PER_TURN:
+	for i in MAX_ENERGY_ICONS:
 		var icon := _make_icon("icons/energy_on.png")
 		row.add_child(icon)
 		energy_icons.append(icon)
@@ -880,19 +916,29 @@ func _banner(text: String, color: Color) -> void:
 	tw.tween_callback(strip.queue_free)
 
 
-# Konec případu: přes obrazovku dopadne razítko SCHVÁLENO / ZAMÍTNUTO.
+# Konec případu: přes obrazovku dopadne razítko SCHVÁLENO / ZAMÍTNUTO / POVÝŠEN.
 func _end_stamp(won: bool) -> void:
 	var color := Color("#4f9a5a") if won else C_RED
-	var sub := "Úředník padl. +%d grošů." % GameState.WIN_REWARD if won else "Případ prohrán. Poplatky propadají úřadu."
-	UiKit.stamp_overlay(self, "SCHVÁLENO" if won else "ZAMÍTNUTO", sub, color, "POKRAČOVAT", _on_case_finished.bind(won))
+	var title := "SCHVÁLENO" if won else "ZAMÍTNUTO"
+	var sub := "Úředník padl. +%d grošů. Postupuješ o patro výš." % GameState.WIN_REWARD
+	if tutorial:
+		sub = "Zkouška složena. +%d grošů." % GameState.WIN_REWARD
+	elif won and GameState.is_boss_case():
+		title = "POVÝŠEN"
+		sub = "Ředitel padl. Kancelář nahoře je tvoje."
+		color = C_GOLD
+	elif not won:
+		sub = "Případ prohrán. Patro musíš zkusit znova."
+	UiKit.stamp_overlay(self, title, sub, color, "POKRAČOVAT", _on_case_finished.bind(won))
 
 
 # Po razítku: výhra i prohra vedou do města. Kdo prohrál a nemá na další kolo, jde rovnou do baru.
+# Výhra nad ředitelem končí celou hru scénou ending.
 func _on_case_finished(won: bool) -> void:
-	GameState.finish_case(won)
-	if won and tutorial:
-		GameState.tutorial_done = true
-	if not won and not GameState.can_afford_round():
+	GameState.finish_case(won, tutorial)
+	if GameState.career_won():
+		GameState.goto("res://scenes/ending.tscn")
+	elif not won and not GameState.can_afford_round():
 		GameState.goto("res://scenes/bar.tscn")
 	else:
 		GameState.goto("res://scenes/city.tscn")
@@ -1383,7 +1429,7 @@ func _apply_roulette(seg: Dictionary) -> void:
 			if e.is_empty():
 				_break_rib()  # ruce už nejsou, tak aspoň žebro
 			else:
-				cards_per_turn = GameState.cards_per_turn()
+				cards_per_turn = GameState.cards_per_turn() + coffee_bonus
 				_log("Ruleta: šarlatán si bere tvou %s ruku. Hraješ o kartu méně." % GameState.SIDE_ACC[e["side"]])
 				_float_text(player_panel, "-1 karta/tah", C_RED_LIGHT)
 				player_portrait.hurt()
@@ -1425,6 +1471,8 @@ func _refresh() -> void:
 			phase_label.add_theme_color_override("font_color", C_GREY)
 	# Žetony: zlatý = ještě můžeš hrát, šedý = zahráno, rudý křížek = chybí ruka.
 	for i in energy_icons.size():  # žetony podle hráčova limitu
+		# Čtvrtý žeton je vidět jen s kafem; useknuté ruce se ukazují jako rudé křížky.
+		(energy_icons[i] as TextureRect).visible = i < maxi(MAX_CARDS_PER_TURN, cards_per_turn)
 		var file := "icons/energy_lost.png"
 		if i < cards_per_turn:
 			var lit := phase == Phase.PLAYER and i < cards_per_turn - placed_this_turn
@@ -1433,7 +1481,7 @@ func _refresh() -> void:
 	confirm_btn.disabled = phase != Phase.PLAYER
 
 	official_bar.value = maxi(official_hp, 0)
-	official_label.text = "%d/%d" % [maxi(official_hp, 0), OFFICIAL_MAX_HP]
+	official_label.text = "%d/%d" % [maxi(official_hp, 0), official_max_hp]
 	player_bar.value = maxi(player_hp, 0)
 	player_label.text = "%d/%d" % [maxi(player_hp, 0), player_max_hp]
 	player_deck_label.text = "Balíček: %d" % player_deck.size()

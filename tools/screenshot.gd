@@ -2,12 +2,16 @@ extends SceneTree
 # Spustí scénu v SubViewportu 1280x720, chvíli počká a uloží snímek.
 #   godot --path . -s tools/screenshot.gd -- out=/tmp/shot.png [scene=main] [frames=60]
 #       [setup=poor|hands|rich] [action=...] [after=40]
-# scene: main, menu, city, bar (scenes/<name>.tscn)
+# scene: main, menu, city, bar, ending (scenes/<name>.tscn)
 # setup: stav GameState před načtením scény
 #   poor  = prohra, 0 grošů        hands = prohra, 5 grošů, obě ruce pryč
 #   rich  = výhra, 70 grošů, jedna ruka pryč a jedna protéza
+#   boss  = poslední patro (ředitel), úplatek, kafe, razítko, vesta
+#   won   = kariéra dokončená (pro scénu ending)
+#   shop  = patro 3, 60 grošů, ruka, žebro, vesta a dvě razítka (pro bar + action=honza)
 # action (po frames snímcích):
 #   main: end_win, end_lose, enemy, select, roulette_offer, roulette, roulette_spin, rib
+#   ending: results
 #   menu: difficulty, intro       bar: honza (projde dialog až do obchodu)
 #   city: hover_bar
 
@@ -39,6 +43,29 @@ func _initialize() -> void:
 			gs.knows_password = true
 			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "prosthesis", "side": "right"}, {"id": "broken_rib"}, {"id": "broken_rib"}]
 			gs.tutorial_done = true
+		"boss":
+			gs.new_game(1)
+			gs.tutorial_done = true
+			gs.rank = 3
+			gs.case_number = 5
+			gs.grose = 40
+			gs.effects = [{"id": "bribe"}, {"id": "coffee"}, {"id": "fake_stamp"}, {"id": "vest"}]
+		"won":
+			gs.new_game(1)
+			gs.tutorial_done = true
+			gs.rank = gs.RANKS.size()
+			gs.case_number = 6
+			gs.cases_won = 4
+			gs.cases_lost = 1
+			gs.grose = 85
+			gs.effects = [{"id": "prosthesis", "side": "left"}, {"id": "broken_rib"}]
+		"shop":
+			gs.new_game(1)
+			gs.tutorial_done = true
+			gs.rank = 2
+			gs.grose = 60
+			gs.last_result = "win"
+			gs.effects = [{"id": "no_hand", "side": "left"}, {"id": "broken_rib"}, {"id": "vest"}, {"id": "fake_stamp"}, {"id": "fake_stamp"}]
 	gs.knows_password = true
 
 	vp = SubViewport.new()
@@ -95,6 +122,13 @@ func _initialize() -> void:
 			node._show_difficulty()
 		"intro":
 			node._start_game(1)
+		"results":  # ending: přeskočí dialog a ukáže statistiky (razítko odklikne)
+			node.dialog.visible = false
+			node._show_results()
+			await _frames(30)
+			for c in node.get_children():
+				if c.z_index == 45:
+					c.queue_free()
 		"hover_bar":
 			node._set_caption("BAR U ZLATÉ KRYSY · černý trh. Heslo znáš.", UiKit.C_PINK)
 		"tutorial_play":

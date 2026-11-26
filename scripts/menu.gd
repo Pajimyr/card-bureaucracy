@@ -73,6 +73,7 @@ func _show_difficulty() -> void:
 	_clear()
 	_centered(UiKit.label("VYBER SI OBTÍŽNOST", UiKit.FS_XL, UiKit.C_GOLD_LIGHT, true))
 	_centered(UiKit.label("Mění velikost balíčku, ceny na úřadě a v baru.", UiKit.FS_M, UiKit.C_PAPER, true))
+	_centered(UiKit.label("Cíl: vyhraj případ na všech %d patrech úřadu a poraz ředitele." % GameState.RANKS.size(), UiKit.FS_M, UiKit.C_GOLD, true))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	_centered(row)
@@ -145,6 +146,7 @@ func _intro() -> void:
 	var choice: String = await dialog.run([
 		{"who": who, "portrait": CHARLATAN, "color": col, "text": "Psst. Ty. Jo, ty s tím ocasem."},
 		{"who": who, "portrait": CHARLATAN, "color": col, "text": "Jdeš na úřad? S tímhle čumákem? Tam ti sežerou i fousky."},
+		{"who": who, "portrait": CHARLATAN, "color": col, "text": "Úřad má čtyři patra. Nahoře sedí ředitel. Kdo ho porazí, dostane razítko a kancelář s výhledem."},
 		{"who": who, "portrait": CHARLATAN, "color": col, "text": "Až tě oškubou, a oni tě oškubou, zajdi dolů do slumů. Bar U Zlaté krysy."},
 		{"who": who, "portrait": CHARLATAN, "color": col,
 			"text": "Barmanovi řekneš: „Jdu sem pro Honzu.“ Zapamatuj si to. Za radu nic nechci. Zatím.",

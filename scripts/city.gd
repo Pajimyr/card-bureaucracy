@@ -64,7 +64,8 @@ func _make_header() -> Control:
 	var hb := HBoxContainer.new()
 	header.add_child(hb)
 	hb.add_child(UiKit.label("SLUMY", UiKit.FS_M, UiKit.C_GOLD_LIGHT, true))
-	hb.add_child(UiKit.label("  ·  Dolní město, kam úřad nechodí", UiKit.FS_M, UiKit.C_PAPER, true))
+	hb.add_child(UiKit.label("  ·  ", UiKit.FS_M, UiKit.C_PAPER, true))
+	hb.add_child(_make_career())
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hb.add_child(spacer)
@@ -179,7 +180,7 @@ func _make_side() -> Control:
 		_:
 			result += "žádný"
 	ivb.add_child(UiKit.label(result, UiKit.FS_M, res_color))
-	ivb.add_child(UiKit.label("Karet za tah: %d" % GameState.cards_per_turn(), UiKit.FS_M, UiKit.C_PAPER))
+	ivb.add_child(UiKit.label("Karet za tah: %d · Max HP: %d" % [GameState.cards_per_turn(), GameState.player_max_hp()], UiKit.FS_M, UiKit.C_PAPER))
 
 	# Debuffy a buffy jako karty
 	var fx := UiKit.panel("ui/panel_frame.png", 12, 14)
@@ -188,8 +189,8 @@ func _make_side() -> Control:
 	fvb.add_theme_constant_override("separation", 6)
 	fx.add_child(fvb)
 	fvb.add_child(UiKit.label("DEBUFFY A BUFFY", UiKit.FS_S, UiKit.C_GREY))
-	# Do dvou efektů velké karty, víc se nevejde, tak kompaktní řádky.
-	# Stejné efekty bez strany (žebra) se sčítají do jednoho řádku.
+	# Do dvou efektů velké karty, víc se nevejde, tak kompaktní žetony ve dvou sloupcích.
+	# Stejné efekty bez strany (žebra, vesty, razítka) se sčítají do jednoho žetonu.
 	var groups := _effect_groups()
 	if groups.is_empty():
 		fvb.add_child(UiKit.label("Zatím celá krysa.", UiKit.FS_M, UiKit.C_PAPER_DIM))
@@ -200,8 +201,13 @@ func _make_side() -> Control:
 		for g in groups:
 			cards.add_child(UiKit.effect_card(g["icon"], g["title"], g["short"], g["buff"]))
 	else:
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 6)
+		fvb.add_child(grid)
 		for g in groups:
-			fvb.add_child(_effect_row(g))
+			grid.add_child(_effect_row(g))
 
 	# Úřad: další kolo za poplatek
 	var urad_box := VBoxContainer.new()
@@ -214,7 +220,9 @@ func _make_side() -> Control:
 	urad_btn.disabled = not GameState.can_afford_round()
 	urad_btn.pressed.connect(_on_urad)
 	urad_box.add_child(urad_btn)
-	var what := "DALŠÍ PŘÍPAD" if GameState.last_result == "win" else "OPAKOVAT PŘÍPAD"
+	var what := "PATRO %d: %s" % [GameState.rank + 1, GameState.current_rank()["name"].to_upper()]
+	if GameState.last_result == "lose":
+		what = "ZNOVU " + what
 	var title := UiKit.label("ÚŘAD · %s" % what, UiKit.FS_M, UiKit.C_GOLD_LIGHT, true)
 	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	urad_box.add_child(title)
@@ -235,6 +243,21 @@ func _on_urad() -> void:
 		GameState.goto(CASE_SCENE)
 
 
+# Kariéra v záhlaví: žeton za každé patro (zlatý = splněno), aktuální patro a cíl hry.
+func _make_career() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(UiKit.label("KARIÉRA ", UiKit.FS_M, UiKit.C_PAPER, true))
+	for i in GameState.RANKS.size():
+		row.add_child(UiKit.icon("icons/energy_on.png" if i < GameState.rank else "icons/energy_off.png"))
+	var r: Dictionary = GameState.current_rank()
+	var boss := " (boss)" if r.get("boss", false) else ""
+	row.add_child(UiKit.label("  Patro %d/%d: %s%s" % [GameState.rank + 1, GameState.RANKS.size(), r["name"], boss],
+		UiKit.FS_M, UiKit.C_GOLD_LIGHT, true))
+	row.add_child(UiKit.label("  ·  poraz ředitele a vyhraješ", UiKit.FS_M, UiKit.C_PAPER_DIM, true))
+	return row
+
+
 func _career_over() -> void:
 	UiKit.stamp_overlay(self, "KONEC KARIÉRY", "Bez grošů a bez rukou. Úřad vyhrál.", UiKit.C_RED, "HLAVNÍ MENU",
 		func() -> void: GameState.goto(MENU_SCENE))
@@ -248,7 +271,7 @@ func _effect_groups() -> Array:
 		if not e.has("side") and by_id.has(e["id"]):
 			by_id[e["id"]]["count"] += 1
 			continue
-		var g := {"icon": def["icon"], "title": GameState.effect_title(e), "short": def["short"],
+		var g := {"id": e["id"], "icon": def["icon"], "title": GameState.effect_title(e), "short": def["short"],
 			"buff": def["kind"] == "buff", "count": 1}
 		out.append(g)
 		if not e.has("side"):
@@ -256,8 +279,7 @@ func _effect_groups() -> Array:
 	for g in out:
 		if g["count"] > 1:
 			g["title"] += " ×%d" % g["count"]
-			if g["icon"] == "rib":
-				g["short"] = "-%d HP" % (GameState.RIB_HP * g["count"])
+			g["short"] = GameState.effect_short(g["id"], g["count"])
 	return out
 
 
@@ -273,12 +295,11 @@ func _effect_row(g: Dictionary) -> Control:
 	pic.texture = UiKit.tex("icons/card_%s.png" % g["icon"])
 	pic.custom_minimum_size = Vector2(32, 32)
 	hb.add_child(pic)
-	var t := UiKit.label(g["title"], UiKit.FS_M, UiKit.C_INK)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hb.add_child(t)
 	var sh := UiKit.label(g["short"], UiKit.FS_M, UiKit.C_GREEN_DARK if g["buff"] else UiKit.C_RED_DARK)
+	sh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sh.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(sh)
 	UiKit.ignore_mouse(row)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.tooltip_text = g["title"]  # celý název efektu pod myší
 	return row

@@ -1,6 +1,6 @@
 extends Control
 # Bar U Zlaté krysy. Barman, heslo „Jdu sem pro Honzu“, závěs, a za ním
-# Honzův obchod: výkup rukou (groše za debuff) a protézy (buff za groše).
+# Honzův obchod: výkup rukou (groše za debuff), protézy a další zboží (GameState.SHOP_ORDER).
 
 const CITY_SCENE := "res://scenes/city.tscn"
 const MENU_SCENE := "res://scenes/menu.tscn"
@@ -18,8 +18,7 @@ var dialog: DialogBox
 var shop: Control
 var money_label: Label
 var status_label: Label
-var sell_btn: Button
-var buy_btn: Button
+var shop_buttons: Dictionary = {}  # id zboží -> Button
 var leave_btn: Button
 
 
@@ -113,10 +112,10 @@ func _build_shop() -> void:
 	shop = CenterContainer.new()
 	shop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(shop)
-	var box := UiKit.panel("ui/panel_frame.png", 12, 22)
+	var box := UiKit.panel("ui/panel_frame.png", 12, 18)
 	shop.add_child(box)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
+	vb.add_theme_constant_override("separation", 8)
 	box.add_child(vb)
 
 	var head := HBoxContainer.new()
@@ -132,86 +131,123 @@ func _build_shop() -> void:
 	money_label = UiKit.label("", UiKit.FS_M, UiKit.C_GOLD, true)
 	head.add_child(money_label)
 
-	var quote := UiKit.label("Honza si tě změří jedním okem. „Ruka je ruka. Beru každou.“", UiKit.FS_M, UiKit.C_PAPER)
+	var quote := UiKit.label("Honza si tě změří jedním okem. „Ruka je ruka. Beru každou. A prodám ti cokoli.“", UiKit.FS_M, UiKit.C_PAPER)
 	vb.add_child(quote)
 
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 20)
-	vb.add_child(cols)
-	sell_btn = UiKit.button("PRODAT", Vector2(200, 56))
-	sell_btn.pressed.connect(_on_sell)
-	cols.add_child(_offer("PRODEJ",
-		UiKit.effect_card("paw", "Tvoje ruka", "-1 karta/tah", false),
-		"+%d grošů" % GameState.hand_price(), UiKit.C_GOLD,
-		"Která, rozhodne Honza.", sell_btn))
-	buy_btn = UiKit.button("KOUPIT", Vector2(200, 56))
-	buy_btn.pressed.connect(_on_buy)
-	cols.add_child(_offer("NÁKUP",
-		UiKit.effect_card("prosthesis", "Protéza", "karta zpět", true),
-		"-%d grošů" % GameState.prosthesis_price(), UiKit.C_RED_LIGHT,
-		"Jizva zůstane.", buy_btn))
+	# Zboží v mřížce 3 sloupce, pořadí podle GameState.SHOP_ORDER.
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	vb.add_child(grid)
+	for id in GameState.SHOP_ORDER:
+		grid.add_child(_offer(id))
 
 	status_label = UiKit.label("", UiKit.FS_M, UiKit.C_PAPER_DIM)
 	status_label.custom_minimum_size = Vector2(0, 24)
 	vb.add_child(status_label)
-	leave_btn = UiKit.button("ODEJÍT", Vector2(240, 56))
+	leave_btn = UiKit.button("ODEJÍT", Vector2(240, 52))
 	leave_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	leave_btn.pressed.connect(_leave)
 	vb.add_child(leave_btn)
 	_refresh_shop()
 
 
-func _offer(title: String, card: Control, price: String, price_color: Color, note: String, btn: Button) -> Control:
-	var panel := UiKit.panel("ui/plaque_dark.png", 12, 16)
-	panel.custom_minimum_size = Vector2(300, 0)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 8)
-	panel.add_child(vb)
-	vb.add_child(UiKit.label(title, UiKit.FS_S, UiKit.C_GREY))
-	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vb.add_child(card)
-	var p := UiKit.label(price, UiKit.FS_L, price_color, true)
-	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vb.add_child(p)
-	var n := UiKit.label(note, UiKit.FS_M, UiKit.C_PAPER_DIM)
-	n.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vb.add_child(n)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vb.add_child(btn)
+# Jedna nabídka: karta zboží vlevo, cena, poznámka a tlačítko vpravo.
+func _offer(id: String) -> Control:
+	var title: String
+	var short: String
+	var note: String
+	var icon: String
+	var is_buff := true
+	match id:
+		"sell_hand":
+			title = "Tvoje ruka"
+			short = "-1 karta/tah"
+			note = "Výkup. Kterou, rozhodne Honza."
+			icon = "paw"
+			is_buff = false
+		"prosthesis":
+			title = "Protéza"
+			short = "karta zpět"
+			note = "Nahradí ruku. Jizva zůstane."
+			icon = "prosthesis"
+		_:
+			var item: Dictionary = GameState.ITEMS[id]
+			title = item["title"]
+			short = item["short"]
+			note = item["note"]
+			icon = GameState.EFFECTS[id]["icon"] if GameState.EFFECTS.has(id) else id
+	var panel := UiKit.panel("ui/plaque_dark.png", 12, 10)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 10)
+	panel.add_child(hb)
+	hb.add_child(UiKit.effect_card(icon, title, short, is_buff))
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 4)
+	right.custom_minimum_size = Vector2(200, 0)
+	hb.add_child(right)
+	var selling := id == "sell_hand"
+	var price := UiKit.label(("+%d g" if selling else "-%d g") % GameState.item_price(id), UiKit.FS_M,
+		UiKit.C_GOLD if selling else UiKit.C_RED_LIGHT, true)
+	right.add_child(price)
+	var n := UiKit.label(note, UiKit.FS_S * 2, UiKit.C_PAPER_DIM)
+	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	n.custom_minimum_size = Vector2(200, 0)
+	right.add_child(n)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(spacer)
+	var btn := UiKit.button("PRODAT" if selling else "KOUPIT", Vector2(200, 40))
+	btn.pressed.connect(_on_trade.bind(id))
+	right.add_child(btn)
+	shop_buttons[id] = btn
 	return panel
 
 
 func _refresh_shop() -> void:
 	money_label.text = "%d grošů" % GameState.grose
-	sell_btn.disabled = not GameState.can_sell_hand()
-	sell_btn.text = "PRODAT" if GameState.can_sell_hand() else "UŽ NEMÁŠ"
-	buy_btn.disabled = not GameState.can_buy_prosthesis()
-	if GameState.hands_lost() == 0:
-		buy_btn.text = "NEPOTŘEBUJEŠ"
-	elif GameState.grose < GameState.prosthesis_price():
-		buy_btn.text = "NEMÁŠ NA TO"
-	else:
-		buy_btn.text = "KOUPIT"
+	for id in shop_buttons:
+		var btn: Button = shop_buttons[id]
+		var problem := GameState.item_problem(id)
+		btn.disabled = problem != ""
+		btn.text = problem if problem != "" else ("PRODAT" if id == "sell_hand" else "KOUPIT")
 
 
-func _on_sell() -> void:
-	var e := GameState.sell_hand()
-	if e.is_empty():
+func _on_trade(id: String) -> void:
+	var price := GameState.item_price(id)
+	var before := GameState.effects.duplicate(true)
+	if not GameState.buy_item(id):
 		return
-	status_label.text = "Honza ti vzal %s ruku. Bude ti chybět jedna karta za tah." % GameState.SIDE_ACC[e["side"]]
-	status_label.add_theme_color_override("font_color", UiKit.C_RED_LIGHT)
-	UiKit.shake(self, 8.0)
-	UiKit.float_text(self, money_label.get_global_rect().get_center(), "+%d" % GameState.hand_price(), UiKit.C_GOLD_LIGHT)
-	_refresh_shop()
-
-
-func _on_buy() -> void:
-	var e := GameState.buy_prosthesis()
-	if e.is_empty():
-		return
-	status_label.text = "%s protéza sedí. Skoro jako vlastní." % GameState.SIDE_ADJ[e["side"]]
-	status_label.add_theme_color_override("font_color", UiKit.C_GREEN)
-	UiKit.float_text(self, money_label.get_global_rect().get_center(), "-%d" % GameState.prosthesis_price(), UiKit.C_RED_LIGHT)
+	var good := true
+	var text := ""
+	match id:
+		"sell_hand":
+			var side: String = GameState.effects[-1]["side"]
+			text = "Honza ti vzal %s ruku. Bude ti chybět jedna karta za tah." % GameState.SIDE_ACC[side]
+			good = false
+			UiKit.shake(self, 8.0)
+		"prosthesis":
+			var side := ""
+			for i in GameState.effects.size():
+				if GameState.effects[i]["id"] == "prosthesis" and before[i]["id"] == "no_hand":
+					side = GameState.effects[i]["side"]
+			text = "%s protéza sedí. Skoro jako vlastní." % GameState.SIDE_ADJ.get(side, "Nová")
+		"salve":
+			text = "Mast pálí jako čert, ale žebro srostlo. Max HP zpátky."
+		"vest":
+			text = "Vesta drží. Na úřadě vydržíš o %d HP víc." % GameState.VEST_HP
+		"fake_stamp":
+			text = "Razítko je skoro pravé. V každém případu máš kartu navíc."
+		"bribe":
+			text = "Obálka zmizí v kapse. Příští úředník začne o %d HP slabší." % GameState.BRIBE_HP
+		"coffee":
+			text = "Kafe je hnusné a silné. Příští případ hraješ o kartu víc."
+	status_label.text = text
+	status_label.add_theme_color_override("font_color", UiKit.C_RED_LIGHT if not good else UiKit.C_GREEN)
+	var sign := "+" if id == "sell_hand" else "-"
+	UiKit.float_text(self, money_label.get_global_rect().get_center(), "%s%d" % [sign, price],
+		UiKit.C_GOLD_LIGHT if id == "sell_hand" else UiKit.C_RED_LIGHT)
 	_refresh_shop()
 
 

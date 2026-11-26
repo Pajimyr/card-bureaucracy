@@ -70,3 +70,37 @@ Simulace počítá s heuristikou, která vždycky točí, a s krysou bez debuff�
 První případ je tutorial (`GameState.tutorial_done`). Má 8 karet hráče, 3 karty úředníka, úředník nasazuje 1 kartu za tah a tři blokující dialogy: úvod, první útok a overflow/postup zadní řady. **Tutorial nejde prohrát:** padlé karty hráče se vracejí do balíčku s plným HP a HP hráče neklesne pod 1. Úředník má jen 3 karty a nic neléčí, takže každá položená karta ho postupně dorazí. Simulace nejhoršího hráče (1 nejslabší karta za tah, náhodný slot) vyhrála všech 3000 partií, nejdéle za 13 kol.
 
 Tutorial má vlastní konstanty `TUT_PLAYER_CARDS`, `TUT_ENEMY_CARDS` a `TUT_ENEMY_CARDS_PER_TURN` v `scripts/main.gd`.
+
+## Kariéra: patra úřadu a výhra (2026-11-26)
+
+Hra měla jen prohru (konec kariéry bez grošů a rukou), vyhrát nešlo. Teď má krysa jasný cíl: vyhrát případ na čtyřech patrech úřadu a porazit ředitele. Prohra zůstává stejná.
+
+| Patro | Úředník | HP | Balíček úředníka | Karty v balíčku úředníka |
+|---|---|---|---|---|
+| 1 Podatelna | Vrchní podatelna | 16 | 8 | Úředník podatelny, Referent, Revizor |
+| 2 Referát | Referent | 20 | 9 | všech 5 původních |
+| 3 Odbor | Vedoucí odboru | 20 | 8 | Referent, Revizor, Vedoucí odboru, Kontrolor |
+| 4 Ředitelství (boss) | Ředitel | 24 | 6 | Referent, Revizor, Vedoucí, Kontrolor, Tajemník (3/6), Ředitel (5/6) |
+
+HP úředníka je slabá páka (viz výše). Obtížnost pater dělá hlavně síla karet v jeho balíčku a velikost balíčku. Boss má malý balíček, ale silné karty.
+
+Výhra jednoho případu pro heuristiku (Pondělí ráno, balíček 9, krysa bez efektů):
+
+| Patro | Výhra |
+|---|---|
+| 1 | 93 % |
+| 2 | 54 % |
+| 3 | 39 % |
+| 4 (boss) | 22 % |
+
+Vliv zboží z baru na bosse (každé samostatně): nic 20 %, úplatek 32 %, kafe 27 %, padělané razítko 41 %, vesta 24 %. Razítko je nejsilnější, proto stojí 22 grošů a dají se mít nejvýš tři.
+
+Celá kariéra (simulace `python3 tools/balance_sim.py career`, 5000 her na řádek). Strategie s nákupy: drží si rezervu na další kolo, kupuje razítka, vestu, mast na žebra a před bossem úplatek s kafem. Když nemá na kolo, prodá ruku.
+
+| Obtížnost | Výhra bez nákupů | Výhra s nákupy | Průměrně případů do výhry |
+|---|---|---|---|
+| Úřední hodiny | 57 % | 98 % | 4,1 |
+| Pondělí ráno | 33 % | 92 % | 4,3 |
+| Pátek 14:55 | 9 % | 32 % | 4,8 |
+
+Hra se tedy dá vyhrát a bar má smysl: kdo nakupuje, vyhrává mnohem častěji. Pátek 14:55 zůstává těžký schválně.

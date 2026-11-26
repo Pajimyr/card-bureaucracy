@@ -131,7 +131,4 @@ godot --path . -s tools/screenshot.gd -- out=/tmp/shot.png scene=city setup=rich
 
 ## Tým
 
-| Člen | Role |
-|---|---|
-| Pajimyr | design, programování, grafika |
-<!-- Doplňte další členy týmu. Každý musí mít v gitu commity pod vlastním jménem. -->
+Projekt dělal sám **Pajimyr** (design, programování, grafika, dokumentace) s AI asistentem.

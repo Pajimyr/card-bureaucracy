@@ -1,6 +1,6 @@
 # Retrospektiva
 
-Každý člen píše **vlastní, krátkou** retrospektivu do `docs/retrospektiva/<jmeno>.md`. Stačí půl strany. Tři otázky:
+Každý student píše **vlastní, krátkou** retrospektivu do `docs/retrospektiva/<jmeno>.md`. Stačí půl strany. Tři otázky:
 
 1. **Co bych udělal jinak?**
 2. **Kde mi AI pomohla?**
@@ -22,7 +22,6 @@ Pište konkrétně: místo „AI pomohla s kódem“ napište „AI napsala gene
 ## Jedna věc, kterou si odnáším
 ```
 
-## Soubory členů
+## Retrospektivy
 
 - [pajimyr.md](pajimyr.md)
-<!-- Další členové: přidejte svůj soubor a odkaz sem. -->

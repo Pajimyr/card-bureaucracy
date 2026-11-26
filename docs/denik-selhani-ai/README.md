@@ -1,6 +1,6 @@
 # Deník selhání AI
 
-Každý člen týmu vede **vlastní** soubor `docs/denik-selhani-ai/<jmeno>.md`. Minimum jsou **3 případy**. Piš vlastními slovy a jen o tom, co se opravdu stalo. U obhajoby se na to budou ptát.
+Každý student vede **vlastní** soubor `docs/denik-selhani-ai/<jmeno>.md`. Minimum jsou **3 případy**. Piš vlastními slovy a jen o tom, co se opravdu stalo. U obhajoby se na to budou ptát.
 
 Každý případ má čtyři části:
 
@@ -27,7 +27,6 @@ Každý případ má čtyři části:
 **Co si z toho beru:**
 ```
 
-## Soubory členů
+## Deníky
 
 - [pajimyr.md](pajimyr.md)
-<!-- Další členové: přidejte svůj soubor a odkaz sem. -->

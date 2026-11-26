@@ -65,6 +65,6 @@ Godot 4 tím drží stabilní identifikátor zdroje, aby odkazy přežily přejm
 
 ## 4. Na co se připravit kriticky
 
-- Umět říct, **co jsi dělal ty** a co AI. Projdi si `git log` a svůj deník selhání AI.
+- Umět říct, **co jsi rozhodoval ty** a co psala AI. Projdi si `git log`, deník selhání AI a retrospektivu, ať je umíš převyprávět vlastními slovy.
 - Umět vysvětlit aspoň jednu funkci řádek po řádku (doporučení: `GameState.buy_item` nebo `main.gd::_overflow`).
 - Vědět slabiny: všichni úředníci sdílí jeden portrét, chybí zvuk, testy souboje jsou jen dva scénáře, simulátor hraje jednoduchou strategii.

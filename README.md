@@ -56,7 +56,7 @@ Zadní řadu můžeš obsadit, jen když je v pruhu obsazená přední. Volné s
 ### Postup
 
 ```bash
-git clone <adresa-repozitáře> card-bureaucracy
+git clone https://github.com/Pajimyr/card-bureaucracy.git
 cd card-bureaucracy
 ```
 
